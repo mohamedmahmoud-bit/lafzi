@@ -1,0 +1,35 @@
+# Local full stack: Postgres + app. For day-to-day development prefer `npm run dev` + the db service.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lafzi
+      POSTGRES_PASSWORD: lafzi
+      POSTGRES_DB: lafzi
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lafzi"]
+      interval: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    command: ["node", "migrate.cjs"]
+    environment:
+      DATABASE_URL: postgres://lafzi:lafzi@db:5432/lafzi
+    depends_on:
+      db: { condition: service_healthy }
+
+  app:
+    build: .
+    ports: ["3000:3000"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://lafzi:lafzi@db:5432/lafzi
+      # NODE_ENV=production refuses mock auth/mock heat map. Configure Noon SSO (AUTH_PROVIDER=oidc).
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:
