@@ -18,7 +18,8 @@
     "xp:reconcile": "tsx src/db/reconcile-xp.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed:content": "tsx src/db/seed-content.ts",
-    "vercel-build": "npm run db:migrate && npm run db:seed:content && next build"
+    "vercel-build": "npm run db:migrate && npm run db:seed:content && next build",
+    "demo:build": "node demo/build.mjs demo/lafzi-demo.html node_modules/.bin/tailwindcss"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

@@ -1,0 +1,164 @@
+@import "tailwindcss" source(none);
+@source "../src/app";
+@source "../src/components";
+@source "./";
+
+/*
+ * Design tokens. These are NEUTRAL PLACEHOLDERS — not Noon's brand. Replace the values under
+ * "brand.*" with official Noon tokens when provided (see src/config/brand.ts). Components only
+ * reference semantic tokens, never raw colors.
+ */
+:root {
+  --brand-primary: #4338ca;
+  --brand-primary-foreground: #ffffff;
+  --brand-primary-soft: #eef0ff;
+  --brand-secondary: #0f766e;
+  --brand-secondary-soft: #e6f6f4;
+  --brand-background: #f6f6fb;
+  --brand-surface: #ffffff;
+  --brand-surface-muted: #f1f1f7;
+  --brand-text: #15132b;
+  --brand-text-muted: #5f5d78;
+  --brand-border: #e4e3ef;
+  --brand-radius: 1.1rem;
+
+  --accent-xp: #b45309;
+  --accent-xp-soft: #fff4e0;
+  --accent-streak: #ea580c;
+  --accent-streak-soft: #fff0e6;
+  --state-success: #047857;
+  --state-success-soft: #e3f7ee;
+  --state-danger: #be123c;
+  --state-danger-soft: #ffe8ee;
+  --noon-cta: #15132b;
+  --noon-cta-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand-primary: #8b8cff;
+    --brand-primary-foreground: #0d0c1d;
+    --brand-primary-soft: #23214a;
+    --brand-secondary: #4fd1c5;
+    --brand-secondary-soft: #12302e;
+    --brand-background: #0d0c1d;
+    --brand-surface: #17162c;
+    --brand-surface-muted: #201f38;
+    --brand-text: #f1f0fb;
+    --brand-text-muted: #a9a7c4;
+    --brand-border: #2c2a48;
+    --accent-xp: #fbbf24;
+    --accent-xp-soft: #3a2a0c;
+    --accent-streak: #fb923c;
+    --accent-streak-soft: #3a1d0c;
+    --state-success: #34d399;
+    --state-success-soft: #0f2e24;
+    --state-danger: #fb7185;
+    --state-danger-soft: #3a121d;
+    --noon-cta: #f1f0fb;
+    --noon-cta-foreground: #0d0c1d;
+  }
+}
+
+@theme inline {
+  --color-primary: var(--brand-primary);
+  --color-primary-foreground: var(--brand-primary-foreground);
+  --color-primary-soft: var(--brand-primary-soft);
+  --color-secondary: var(--brand-secondary);
+  --color-secondary-soft: var(--brand-secondary-soft);
+  --color-background: var(--brand-background);
+  --color-surface: var(--brand-surface);
+  --color-surface-muted: var(--brand-surface-muted);
+  --color-foreground: var(--brand-text);
+  --color-muted: var(--brand-text-muted);
+  --color-border: var(--brand-border);
+  --color-xp: var(--accent-xp);
+  --color-xp-soft: var(--accent-xp-soft);
+  --color-streak: var(--accent-streak);
+  --color-streak-soft: var(--accent-streak-soft);
+  --color-success: var(--state-success);
+  --color-success-soft: var(--state-success-soft);
+  --color-danger: var(--state-danger);
+  --color-danger-soft: var(--state-danger-soft);
+  --color-noon: var(--noon-cta);
+  --color-noon-foreground: var(--noon-cta-foreground);
+  --radius-brand: var(--brand-radius);
+  --font-sans: var(--font-ui), system-ui, sans-serif;
+  --font-display: var(--font-display-ar), var(--font-ui), serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--brand-background);
+  color: var(--brand-text);
+  font-family: var(--font-ui), system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: pop-in 420ms ease-out both;
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-rise {
+  animation: rise 320ms ease-out both;
+}
+
+/* Demo build: fonts come from Google Fonts instead of next/font. */
+:root {
+  --font-ui: "IBM Plex Sans Arabic";
+  --font-display-ar: "Noto Naskh Arabic";
+}
+/* Explicit dark choice from the viewer wins too (same values as the media block). */
+:root[data-theme="dark"] {
+  --brand-primary: #8b8cff; --brand-primary-foreground: #0d0c1d; --brand-primary-soft: #23214a;
+  --brand-secondary: #4fd1c5; --brand-secondary-soft: #12302e; --brand-background: #0d0c1d;
+  --brand-surface: #17162c; --brand-surface-muted: #201f38; --brand-text: #f1f0fb; --brand-text-muted: #a9a7c4;
+  --brand-border: #2c2a48; --accent-xp: #fbbf24; --accent-xp-soft: #3a2a0c; --accent-streak: #fb923c;
+  --accent-streak-soft: #3a1d0c; --state-success: #34d399; --state-success-soft: #0f2e24; --state-danger: #fb7185;
+  --state-danger-soft: #3a121d; --noon-cta: #f1f0fb; --noon-cta-foreground: #0d0c1d;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+header.sticky { top: env(safe-area-inset-top, 0px); }
+#root { min-height: 100%; display: flex; flex-direction: column; }
