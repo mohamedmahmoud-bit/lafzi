@@ -25,8 +25,10 @@ import type {
  * - Server-to-server Citadel calls are HMAC-SHA256 signed with `x-replit-app-id` +
  *   `x-citadel-signature` headers.
  *
- * NOT confirmed (documented in Noon's "Replit — Start a New App" Notion guide): the exact token
- * request body and what the signature covers. Both live only in `tokenRequest()` below.
+ * Exchange + signing follow noonAcademy/synapse-starter INTEGRATE.md ("Citadel auth"):
+ * - POST /api/oauth/token   body {"code"} → { token: { accessToken, refreshToken, type, expiresIn }, profile }
+ * - POST /api/oauth/refresh body {"refreshToken"} → { accessToken, refreshToken } (single-use: overwrite both)
+ * - x-citadel-signature: t=<unix seconds>,v1=hex(HMAC-SHA256(secret, `${t}.${pathAndSearch}.${rawBody}`))
  */
 export type CitadelConfig = {
   baseUrl: string;
@@ -80,32 +82,35 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
     return { url: url.toString(), state, nonce: "", codeVerifier: "" };
   }
 
-  /** HMAC-SHA256 over the raw request body with the app secret. [CONFIRM against Noon guide] */
-  sign(body: string): string {
-    return createHmac("sha256", this.cfg.appSecret).update(body).digest("hex");
+  /** Citadel request signature v1: `t=<unix seconds>,v1=<hex HMAC-SHA256 of "t.path.rawBody">`. */
+  sign(path: string, rawBody: string, now: number = Date.now()): string {
+    const t = Math.floor(now / 1000).toString();
+    const v1 = createHmac("sha256", this.cfg.appSecret).update(`${t}.${path}.${rawBody}`).digest("hex");
+    return `t=${t},v1=${v1}`;
   }
 
-  /** The single place that knows the token request format. [CONFIRM against Noon guide] */
-  protected async tokenRequest(params: Record<string, string>): Promise<unknown> {
-    const body = JSON.stringify({ app_id: this.cfg.appId, ...params });
-    const res = await (this.cfg.fetchImpl ?? fetch)(this.url("api/oauth/token"), {
+  /** Signed JSON POST to a Citadel API path (e.g. "/api/oauth/token"). */
+  protected async signedPost(path: string, payload: Record<string, string>): Promise<unknown> {
+    const rawBody = JSON.stringify(payload);
+    const res = await (this.cfg.fetchImpl ?? fetch)(this.url(path.replace(/^\//, "")), {
       method: "POST",
       headers: {
         "content-type": "application/json",
         accept: "application/json",
         "x-replit-app-id": this.cfg.appId,
-        "x-citadel-signature": this.sign(body),
+        "x-citadel-signature": this.sign(path, rawBody),
       },
-      body,
+      body: rawBody,
       cache: "no-store",
     });
+    const step = path.endsWith("/refresh") ? "refresh" : "token";
     if (!res.ok) {
       // Citadel's error text explains what it expected; it contains no secrets of ours.
       const detail = (await res.text().catch(() => "")).slice(0, 300);
-      throw new CitadelAuthError(`Citadel token endpoint returned ${res.status}: ${detail}`, `token_${res.status}`);
+      throw new CitadelAuthError(`Citadel ${path} returned ${res.status}: ${detail}`, `${step}_${res.status}`);
     }
     return res.json().catch(() => {
-      throw new CitadelAuthError("Citadel token endpoint returned non-JSON", "token_not_json");
+      throw new CitadelAuthError(`Citadel ${path} returned non-JSON`, `${step}_not_json`);
     });
   }
 
@@ -119,8 +124,32 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
         "no_access_token",
       );
     const refreshToken = (t.refreshToken ?? t.refresh_token) as string | undefined;
-    const exp = decodeJwt(accessToken).exp;
-    return { accessToken, refreshToken, expiresAt: exp ? new Date(exp * 1000) : undefined };
+    const expiresIn = Number(t.expiresIn ?? t.expires_in);
+    let expiresAt: Date | undefined;
+    if (Number.isFinite(expiresIn) && expiresIn > 0) expiresAt = new Date(Date.now() + expiresIn * 1000);
+    else {
+      try {
+        const exp = decodeJwt(accessToken).exp;
+        if (exp) expiresAt = new Date(exp * 1000);
+      } catch {
+        /* opaque token: no expiry info */
+      }
+    }
+    return { accessToken, refreshToken, expiresAt };
+  }
+
+  /** Profile returned next to the token: { id, name, avatarUri, locale, userType, account: { email } }. */
+  static profileFromResponse(json: unknown): (NoonStudentProfile & { userType: string }) | null {
+    const p = (json as { profile?: Record<string, unknown> } | null)?.profile;
+    if (!p || p.id == null) return null;
+    const firstName = String(p.name ?? "").trim().split(/\s+/)[0];
+    return {
+      noonStudentId: String(p.id),
+      displayName: firstName || "طالب نون",
+      avatarUrl: typeof p.avatarUri === "string" ? p.avatarUri : null,
+      grade: null,
+      userType: typeof p.userType === "string" ? p.userType : "UNKNOWN",
+    };
   }
 
   /**
@@ -147,14 +176,10 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
 
   async authenticate(input: AuthenticateInput): Promise<NoonIdentity> {
     if (input.kind !== "callback") throw new CitadelAuthError("Citadel expects a callback");
-    const tokens = CitadelIdentityProvider.extractTokens(
-      await this.tokenRequest({
-        grant_type: "authorization_code",
-        code: input.code,
-        redirect_uri: this.cfg.redirectUri,
-      }),
-    );
-    const { userType, ...profile } = CitadelIdentityProvider.profileFromToken(tokens.accessToken);
+    const json = await this.signedPost("/api/oauth/token", { code: input.code });
+    const tokens = CitadelIdentityProvider.extractTokens(json);
+    const { userType, ...profile } =
+      CitadelIdentityProvider.profileFromResponse(json) ?? CitadelIdentityProvider.profileFromToken(tokens.accessToken);
     const isAdmin = this.cfg.adminProfileIds.includes(profile.noonStudentId);
     if (userType !== "STUDENT" && !isAdmin) {
       throw new CitadelAuthError(`Profile type ${userType} is not allowed`, "not_student");
@@ -169,9 +194,7 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
   }
 
   async refreshToken(refreshToken: string): Promise<NoonTokens> {
-    return CitadelIdentityProvider.extractTokens(
-      await this.tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken }),
-    );
+    return CitadelIdentityProvider.extractTokens(await this.signedPost("/api/oauth/refresh", { refreshToken }));
   }
 
   async getStudentProfile(tokens: NoonTokens): Promise<NoonStudentProfile> {

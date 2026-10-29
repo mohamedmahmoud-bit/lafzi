@@ -45,34 +45,48 @@ describe("Citadel sign-in", () => {
     expect(req.state.length).toBeGreaterThan(20);
   });
 
-  it("exchanges the code with an HMAC-signed request and maps the student profile", async () => {
-    const { p, fetchImpl } = provider({
-      type: "login",
-      token: { accessToken: jwt([student]), refreshToken: "r1" },
-    });
+  it("exchanges the code per Citadel's spec: {code} body + t/v1 signature over t.path.body", async () => {
+    const { p, fetchImpl } = provider({ type: "login", token: { accessToken: jwt([student]), refreshToken: "r1", type: "Bearer", expiresIn: 600 } });
+    const before = Math.floor(Date.now() / 1000);
     const id = await p.authenticate(callback);
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://citadel.studyatnoon.com/api/oauth/token");
+    expect(init.body).toBe(JSON.stringify({ code: "abc" }));
     const headers = init.headers as Record<string, string>;
     expect(headers["x-replit-app-id"]).toBe("app-123");
-    expect(headers["x-citadel-signature"]).toBe(
-      createHmac("sha256", "s3cret").update(String(init.body)).digest("hex"),
-    );
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      app_id: "app-123",
-      code: "abc",
-      grant_type: "authorization_code",
-    });
+    expect(headers["content-type"]).toBe("application/json");
+    const m = headers["x-citadel-signature"].match(/^t=(\d+),v1=([0-9a-f]{64})$/)!;
+    expect(m).not.toBeNull();
+    expect(Number(m[1])).toBeGreaterThanOrEqual(before); // seconds, not ms
+    expect(Number(m[1])).toBeLessThan(before + 5);
+    expect(m[2]).toBe(createHmac("sha256", "s3cret").update(`${m[1]}./api/oauth/token.${init.body}`).digest("hex"));
 
     expect(id).toMatchObject({ provider: "citadel", subject: "636699", role: "student" });
-    expect(id.profile).toEqual({
-      noonStudentId: "636699",
-      displayName: "سارة",
-      avatarUrl: "https://cdn/a.png",
-      grade: null,
-    });
+    expect(id.profile).toEqual({ noonStudentId: "636699", displayName: "سارة", avatarUrl: "https://cdn/a.png", grade: null });
     expect(JSON.stringify(id.profile)).not.toMatch(/email|phone|studyatnoon/);
     expect(id.tokens?.refreshToken).toBe("r1");
+    expect(id.tokens?.expiresAt!.getTime()).toBeGreaterThan(Date.now() + 590_000);
+  });
+
+  it("uses the profile Citadel returns next to the token (works with opaque tokens)", async () => {
+    const { p } = provider({
+      token: { accessToken: "opaque-token", refreshToken: "r", expiresIn: 600 },
+      profile: { id: 9001, name: "ليان أحمد", userType: "STUDENT", avatarUri: null, account: { email: "x@y" } },
+    });
+    const id = await p.authenticate(callback);
+    expect(id.profile).toMatchObject({ noonStudentId: "9001", displayName: "ليان" });
+  });
+
+  it("refreshes via /api/oauth/refresh with a camelCase refreshToken body", async () => {
+    const { p, fetchImpl } = provider({ accessToken: jwt([student]), refreshToken: "r2" });
+    const t = await p.refreshToken("r1");
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://citadel.studyatnoon.com/api/oauth/refresh");
+    expect(init.body).toBe(JSON.stringify({ refreshToken: "r1" }));
+    const sig = (init.headers as Record<string, string>)["x-citadel-signature"];
+    const [, ts, v1] = sig.match(/^t=(\d+),v1=(\w+)$/)!;
+    expect(v1).toBe(createHmac("sha256", "s3cret").update(`${ts}./api/oauth/refresh.${init.body}`).digest("hex"));
+    expect(t.refreshToken).toBe("r2");
   });
 
   it("prefers the STUDENT profile when an account has several", async () => {
@@ -94,7 +108,7 @@ describe("Citadel sign-in", () => {
   });
 
   it("fails closed on errors, missing tokens, expired tokens and deactivated profiles", async () => {
-    await expect(provider({ error: "bad" }, 401).p.authenticate(callback)).rejects.toThrow(/401/);
+    await expect(provider({ error: "bad" }, 401).p.authenticate(callback)).rejects.toMatchObject({ code: "token_401" });
     await expect(provider({ token: {} }).p.authenticate(callback)).rejects.toThrow(
       /no access token/,
     );
