@@ -3,11 +3,11 @@
  * see docs/ARCHITECTURE.md §2.
  */
 export const MISSION_TASKS = [
-  { id: "word_of_day", title: "كلمة اليوم", detail: "خمّن المعنى ثم ثبّته بسؤال", minutes: 1 },
+  { id: "word_of_day", title: "كلمة اليوم", detail: "حلّ سؤال نون الذي ظهرت فيه الكلمة", minutes: 1 },
   {
     id: "daily_session",
-    title: "تدريب اليوم",
-    detail: "كلمات جديدة + مراجعات سريعة + تحدٍّ لفظي",
+    title: "لعبة اليوم",
+    detail: "جولة واحدة على أسئلة من بنك نون",
     minutes: 5,
   },
 ] as const;
@@ -24,6 +24,7 @@ export type MissionProgress = {
 
 export function missionProgress(activity: {
   wordOfDayCompleted: boolean;
+  /** A completed game (or a legacy practice session). */
   dailySessionCompleted: boolean;
 }): MissionProgress {
   const done: Record<MissionTaskId, boolean> = {

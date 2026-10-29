@@ -1,7 +1,8 @@
 /**
- * Integration tests against a real Postgres (DATABASE_URL_TEST). They prove the anti-gaming
- * guarantees end-to-end: idempotent XP, daily caps under concurrency, replayed answers and
- * double completions. Skipped when DATABASE_URL_TEST is not set.
+ * Integration tests against a real Postgres (DATABASE_URL_TEST). They prove the platform's
+ * guarantees end-to-end: idempotent XP and caps, question-bank reconciliation (no duplicates,
+ * versioning, suspension, removal), publish rules, fail-closed games, server-graded rounds,
+ * historical attempts keeping their version, and bank-derived vocabulary. Skipped without a DB.
  */
 import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -15,71 +16,42 @@ if (TEST_URL) {
   process.env.SESSION_SECRET ??= "test-secret-test-secret";
 }
 
-describe.skipIf(!TEST_URL)("reward integrity (Postgres)", async () => {
+describe.skipIf(!TEST_URL)("platform integrity (Postgres)", async () => {
   const { getDb } = await import("@/db/client");
   const s = await import("@/db/schema");
   const { awardXp, lockProfile } = await import("@/features/gamification/xp.service");
   const { DEFAULT_XP_RULES } = await import("@/features/gamification/xp-rules");
-  const { DEFAULT_LEVELS } = await import("@/features/gamification/levels");
-  const { SEED_WORDS, SEED_BADGES } = await import("@/db/seed-data/words");
-  const { normalizeArabic } = await import("@/lib/utils");
+  const { seedPlatformConfig } = await import("@/db/seed-platform");
+  const { seedMockQuestionBank, DEV_CHAPTERS } = await import("@/db/seed-mock-bank");
+  const { MockQuestionBankProvider, NoQuestionBankProvider } = await import("@/features/question-bank/providers");
+  const { buildMockQuestions } = await import("@/features/question-bank/providers/mock-data");
+  const { syncQuestionBank } = await import("@/features/question-bank/sync.service");
+  const { decideQuestion } = await import("@/features/question-bank/pipeline");
+  const games = await import("@/features/games/session.service");
+  const wod = await import("@/features/word-bank/wod.service");
+  const vocab = await import("@/features/word-bank/service");
   const { learningDay } = await import("@/lib/time");
-  const wod = await import("@/features/daily-word/service");
-  const sessions = await import("@/features/vocabulary/session.service");
 
   let userId: string;
   const day = learningDay();
-
-  const ledgerTotal = async () => {
-    const [{ total }] = await getDb()
-      .select({ total: sql<number>`coalesce(sum(${s.xpTransactions.xp}),0)::int` })
-      .from(s.xpTransactions)
-      .where(eq(s.xpTransactions.userId, userId));
-    return total;
-  };
-  const profile = async () =>
-    (await getDb().select().from(s.studentProfiles).where(eq(s.studentProfiles.userId, userId)))[0];
+  const provider = new MockQuestionBankProvider();
+  const sync = () => syncQuestionBank(getDb(), { provider, mode: "manual", chapters: DEV_CHAPTERS, isProduction: false });
+  const q = async (noonId: number) => (await getDb().select().from(s.noonQuestions).where(eq(s.noonQuestions.noonQuestionId, noonId)))[0];
+  const ledgerTotal = async () =>
+    (await getDb().select({ t: sql<number>`coalesce(sum(${s.xpTransactions.xp}),0)::int` }).from(s.xpTransactions).where(eq(s.xpTransactions.userId, userId)))[0].t;
+  const profile = async () => (await getDb().select().from(s.studentProfiles).where(eq(s.studentProfiles.userId, userId)))[0];
 
   beforeAll(async () => {
     const pool = new Pool({ connectionString: TEST_URL });
-    await pool.query(
-      "DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;",
-    );
+    await pool.query("DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;");
     await pool.end();
     const db = getDb();
     await migrate(db, { migrationsFolder: "./drizzle" });
-    await db.insert(s.levels).values(DEFAULT_LEVELS);
-    await db.insert(s.xpRules).values(Object.values(DEFAULT_XP_RULES));
-    await db.insert(s.badges).values(SEED_BADGES.map((b) => ({ ...b })));
-    for (const w of SEED_WORDS.slice(0, 20)) {
-      const [row] = await db
-        .insert(s.vocabularyWords)
-        .values({
-          word: w.word,
-          normalizedWord: normalizeArabic(w.word),
-          meaning: w.meaning,
-          example: w.example,
-          difficulty: w.difficulty,
-          category: w.category,
-        })
-        .returning();
-      await db
-        .insert(s.wordSynonyms)
-        .values(w.synonyms.map((value) => ({ wordId: row.id, value })));
-      if (w.antonyms.length)
-        await db
-          .insert(s.wordAntonyms)
-          .values(w.antonyms.map((value) => ({ wordId: row.id, value })));
-    }
+    await seedPlatformConfig(db);
     const [cohort] = await db.insert(s.cohorts).values({ name: "test" }).returning();
-    const [u] = await db
-      .insert(s.users)
-      .values({ authProvider: "mock", providerSubject: "t1" })
-      .returning();
+    const [u] = await db.insert(s.users).values({ authProvider: "mock", providerSubject: "t1" }).returning();
     userId = u.id;
-    await db
-      .insert(s.studentProfiles)
-      .values({ userId, displayName: "اختبار", cohortId: cohort.id });
+    await db.insert(s.studentProfiles).values({ userId, displayName: "اختبار", cohortId: cohort.id });
   });
 
   afterAll(async () => {
@@ -87,35 +59,19 @@ describe.skipIf(!TEST_URL)("reward integrity (Postgres)", async () => {
     await g.lafziPool?.end();
   });
 
-  it("awards XP once per idempotency key", async () => {
+  it("XP: once per idempotency key, and daily caps hold under concurrency", async () => {
     const grant = () =>
       getDb().transaction(async (tx) => {
         await lockProfile(tx, userId);
-        return awardXp(tx, {
-          userId,
-          action: "wod_opened",
-          idempotencyKey: `wod_opened:${userId}:${day}`,
-          day,
-        });
+        return awardXp(tx, { userId, action: "wod_opened", idempotencyKey: `wod_opened:${userId}:${day}`, day });
       });
     expect(await grant()).toBe(2);
     expect(await grant()).toBe(0);
-    expect(await grant()).toBe(0);
-    expect(await ledgerTotal()).toBe(2);
-    expect((await profile()).xpTotal).toBe(2);
-  });
-
-  it("enforces daily caps even under concurrent requests", async () => {
     const results = await Promise.all(
       Array.from({ length: 40 }, (_, i) =>
         getDb().transaction(async (tx) => {
           await lockProfile(tx, userId);
-          return awardXp(tx, {
-            userId,
-            action: "review_correct",
-            idempotencyKey: `review_correct:test:${i}`,
-            day,
-          });
+          return awardXp(tx, { userId, action: "review_correct", idempotencyKey: `rc:${i}`, day });
         }),
       ),
     );
@@ -123,75 +79,149 @@ describe.skipIf(!TEST_URL)("reward integrity (Postgres)", async () => {
     expect((await profile()).xpTotal).toBe(await ledgerTotal());
   });
 
-  it("word of the day: opening/guessing repeatedly and resubmitting never adds XP", async () => {
-    const view = await wod.getStudentWod(userId);
-    const before = await ledgerTotal();
-    await wod.submitWodGuess(userId, view.guess.options[0].id);
-    await wod.submitWodGuess(userId, view.guess.options[1].id);
-    expect(await ledgerTotal()).toBe(before); // wod_opened already granted in the first test
-
-    const first = await wod.answerWod(userId, "a");
-    const afterFirst = await ledgerTotal();
-    expect(first.totalXp).toBeGreaterThanOrEqual(5);
-    const replay = await wod.answerWod(userId, "b");
-    expect(replay.totalXp).toBe(0);
-    expect(replay.isCorrect).toBe(first.isCorrect); // original verdict is kept
-    expect(await ledgerTotal()).toBe(afterFirst);
-    expect((await profile()).currentStreak).toBe(1);
+  it("games fail closed when nothing is published", async () => {
+    await expect(games.startGame(userId, "relations_hunter", { timed: false })).rejects.toMatchObject({ code: "content_unavailable" });
+    expect((await wod.getVocabWod(userId)).status).toBe("unavailable");
   });
 
-  it("practice session: answers are locked, completion is single-use", async () => {
-    const { id } = await sessions.startSession(userId);
-    expect((await sessions.startSession(userId)).id).toBe(id); // resumes instead of creating more
-    const view = (await sessions.getSessionView(userId, id))!;
+  it("an unconfigured source records not_configured and imports nothing", async () => {
+    const run = await syncQuestionBank(getDb(), { provider: new NoQuestionBankProvider(), mode: "manual", chapters: DEV_CHAPTERS, isProduction: false });
+    expect(run.status).toBe("not_configured");
+    expect((await getDb().select().from(s.noonQuestions)).length).toBe(0);
+  });
 
-    const a1 = await sessions.answerItem(userId, id, 0, "a");
-    const a2 = await sessions.answerItem(userId, id, 0, "b");
+  it("mock provider is refused in production", async () => {
+    await expect(syncQuestionBank(getDb(), { provider, mode: "manual", chapters: DEV_CHAPTERS, isProduction: true })).rejects.toThrow(/production/);
+  });
+
+  it("re-importing the same bank creates no duplicates or new versions", async () => {
+    const first = await sync();
+    expect(first.status).toBe("succeeded");
+    const n = buildMockQuestions().length;
+    expect(first.stats.new).toBe(n);
+    const second = await sync();
+    expect(second.stats.new).toBe(0);
+    expect(second.stats.unchanged).toBe(n);
+    expect((await getDb().select().from(s.noonQuestions)).length).toBe(n);
+    expect((await getDb().select().from(s.noonQuestionVersions)).length).toBe(n);
+  });
+
+  it("publishing is a separate human decision and is refused on validation errors", async () => {
+    const first = await q(990001);
+    expect(first.status).toBe("ready"); // validated, NOT yet visible to students
+    expect(first.publishedVersionId).toBeNull();
+    // Break a question at the source: no correct answer → rejected, cannot be published.
+    provider.data = provider.data.map((d) => (d.id === 990020 ? { ...d, correctChoiceId: null, correctChoiceIds: [] } : d));
+    await sync();
+    const broken = await q(990020);
+    expect(broken.status).toBe("rejected");
+    await expect(decideQuestion(getDb(), { questionId: broken.id, decision: "approve", reviewerId: null, isProduction: false })).rejects.toThrow(/validation/);
+  });
+
+  it("full pipeline: publish, play a server-graded game, answers locked, completion single-use", async () => {
+    const seeded = await seedMockQuestionBank(getDb(), provider);
+    expect(seeded.published).toBeGreaterThan(10);
+    const { id } = await games.startGame(userId, "relations_hunter", { timed: false });
+    expect((await games.startGame(userId, "relations_hunter", { timed: false })).id).toBe(id);
+    const view = (await games.getGameView(userId, id))!;
+    // No answer keys or explanations before answering.
+    expect(view.rounds.every((r) => r.answered === null)).toBe(true);
+    expect(JSON.stringify(view.rounds)).not.toContain("correctId");
+
+    const r0 = view.rounds[0];
+    const a1 = await games.answerRound(userId, id, 0, r0.choices[0].id);
+    const a2 = await games.answerRound(userId, id, 0, r0.choices[1].id);
     expect(a2.isCorrect).toBe(a1.isCorrect);
-    await expect(sessions.completeSession(userId, id)).rejects.toMatchObject({
-      code: "incomplete",
-    });
-    await expect(sessions.answerItem(userId, id, 99, "a")).rejects.toMatchObject({
-      code: "bad_item",
-    });
+    expect(a2.points).toBe(0);
+    await expect(games.completeGame(userId, id)).rejects.toMatchObject({ code: "incomplete" });
+    await expect(games.answerRound(userId, id, 99, "x")).rejects.toMatchObject({ code: "bad_round" });
 
-    for (let i = 1; i < view.total; i++) await sessions.answerItem(userId, id, i, "a");
-    const done = await sessions.completeSession(userId, id);
-    expect(done.awards.map((x) => x.action)).toEqual(
-      expect.arrayContaining(["session_completed", "mission_completed"]),
-    );
-    expect(done.missionCompleted).toBe(true);
-    await expect(sessions.completeSession(userId, id)).rejects.toMatchObject({
-      code: "not_in_progress",
-    });
-
-    const [act] = await getDb()
-      .select()
-      .from(s.studentDailyActivity)
-      .where(and(eq(s.studentDailyActivity.userId, userId), eq(s.studentDailyActivity.day, day)));
-    expect(act.missionCompletedAt).not.toBeNull();
+    const hint = await games.useHint(userId, id, 1);
+    expect(view.rounds[1].choices.map((c) => c.id)).toContain(hint.removed);
+    for (let i = 1; i < view.total; i++) await games.answerRound(userId, id, i, view.rounds[i].choices[0].id);
+    const done = await games.completeGame(userId, id);
+    expect(done.rewards.awards.map((x) => x.action)).toContain("game_completed");
+    expect(done.subskills.length).toBeGreaterThan(0);
+    await expect(games.completeGame(userId, id)).rejects.toMatchObject({ code: "not_in_progress" });
     expect((await profile()).xpTotal).toBe(await ledgerTotal());
+    const [prog] = await getDb().select().from(s.skillProgress).where(eq(s.skillProgress.userId, userId));
+    expect(prog.attempts).toBeGreaterThan(0);
   });
 
-  it("another user cannot read or answer someone else's session", async () => {
-    const [other] = await getDb()
-      .insert(s.users)
-      .values({ authProvider: "mock", providerSubject: "t2" })
-      .returning();
+  it("another student cannot read or answer someone else's game", async () => {
+    const [other] = await getDb().insert(s.users).values({ authProvider: "mock", providerSubject: "t2" }).returning();
     await getDb().insert(s.studentProfiles).values({ userId: other.id, displayName: "آخر" });
-    const { id } = await sessions.startSession(userId);
-    expect(await sessions.getSessionView(other.id, id)).toBeNull();
-    await expect(sessions.answerItem(other.id, id, 0, "a")).rejects.toMatchObject({
-      code: "not_found",
-    });
+    const [sess] = await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.userId, userId)).limit(1);
+    expect(await games.getGameView(other.id, sess.id)).toBeNull();
+    await expect(games.answerRound(other.id, sess.id, 0, "x")).rejects.toMatchObject({ code: "not_found" });
   });
 
-  it("an extra review session after the daily one gives capped per-answer XP only", async () => {
-    const { id } = await sessions.startSession(userId);
-    const view = (await sessions.getSessionView(userId, id))!;
-    expect(view.kind).toBe("review");
-    for (let i = 0; i < view.total; i++) await sessions.answerItem(userId, id, i, "a");
-    const done = await sessions.completeSession(userId, id);
-    expect(done.awards.find((x) => x.action === "session_completed")).toBeUndefined();
+  it("a correctness change at Noon suspends the question; history keeps the old version", async () => {
+    const [ans] = await getDb().select().from(s.gameSessionAnswers).limit(1);
+    const question = (await getDb().select().from(s.noonQuestions).where(eq(s.noonQuestions.id, ans.questionId!)))[0];
+    const oldVersion = ans.questionVersionId;
+    provider.data = provider.data.map((d) => (d.id === question.noonQuestionId ? { ...d, correctChoiceId: d.choices![1].id, correctChoiceIds: [d.choices![1].id] } : d));
+    const run = await sync();
+    expect(run.stats.modified).toBeGreaterThanOrEqual(1);
+    expect(run.stats.suspended).toBeGreaterThanOrEqual(1);
+    const after = await q(question.noonQuestionId);
+    expect(after.status).toBe("review_required");
+    expect(after.publishedVersionId).toBeNull();
+    expect(after.currentVersionId).not.toBe(oldVersion);
+    const [still] = await getDb().select().from(s.gameSessionAnswers).where(eq(s.gameSessionAnswers.id, ans.id));
+    expect(still.questionVersionId).toBe(oldVersion);
   });
+
+  it("an explanation-only edit keeps a published question live on the new version", async () => {
+    const pub = (await getDb().select().from(s.noonQuestions).where(and(eq(s.noonQuestions.status, "published"), eq(s.noonQuestions.noonQuestionId, 990014))))[0];
+    expect(pub).toBeTruthy();
+    provider.data = provider.data.map((d) => (d.id === 990014 ? { ...d, additionalMaterials: [{ id: 1, type: "explanation", content: "<p>شرح محدّث (تجريبي)</p>" }] } : d));
+    await sync();
+    const after = await q(990014);
+    expect(after.status).toBe("published");
+    expect(after.publishedVersionId).toBe(after.currentVersionId);
+    expect(after.publishedVersionId).not.toBe(pub.publishedVersionId);
+  });
+
+  it("bank-derived vocabulary: approved only with Noon evidence, word of the day from the source question", async () => {
+    const rels = await vocab.approvedRelations(getDb(), { isProduction: false });
+    expect(rels.length).toBeGreaterThan(0);
+    for (const r of rels) expect(r.evidence.length).toBeGreaterThan(0);
+    // Distractor pairs never become relationships (co-occurrence is not evidence).
+    const lemmas = rels.flatMap((r) => [r.from.lemma, r.to.lemma]);
+    expect(lemmas).not.toContain("بخيل");
+    const v = await wod.getVocabWod(userId);
+    expect(v.status).toBe("ready");
+    if (v.status !== "ready") return;
+    expect(v.card).toBeNull(); // relation revealed only after answering
+    const res = await wod.answerVocabWod(userId, v.question.choices[0].id);
+    expect(res.view.status === "ready" && res.view.card).toBeTruthy();
+    const replay = await wod.answerVocabWod(userId, v.question.choices[1].id);
+    expect(replay.totalXp).toBe(0);
+  });
+
+  it("removing a source question archives it and suspends vocabulary built on it", async () => {
+    const before = await vocab.approvedRelations(getDb(), { isProduction: false });
+    const victim = before[0].evidence[0].noonQuestionId;
+    provider.data = provider.data.filter((d) => d.id !== victim);
+    const run = await sync();
+    expect(run.stats.removed).toBe(1);
+    expect((await q(victim)).status).toBe("archived");
+    await vocab.runVocabularyExtraction(getDb());
+    const after = await vocab.approvedRelations(getDb(), { isProduction: false });
+    expect(after.find((r) => r.evidence.every((e) => e.noonQuestionId === victim))).toBeUndefined();
+  });
+
+  it("a partial run never archives anything", async () => {
+    const flaky = new MockQuestionBankProvider(provider.data);
+    let calls = 0;
+    const orig = flaky.listQuestions.bind(flaky);
+    flaky.listQuestions = async (p) => {
+      if (++calls > 1) throw new Error("network");
+      return orig(p);
+    };
+    const run = await syncQuestionBank(getDb(), { provider: flaky, mode: "manual", chapters: DEV_CHAPTERS, isProduction: false });
+    expect(run.status).not.toBe("succeeded");
+    expect(run.stats.removed).toBe(0);
+  }, 30_000);
 });

@@ -1,13 +1,15 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
 import { getDb, type DbOrTx, type Tx } from "@/db/client";
 import {
   badges,
+  gameSessionAnswers,
+  gameSessions,
   practiceSessions,
   studentBadges,
   studentDailyActivity,
   studentProfiles,
-  studentWordProgress,
+  studentVocabularyProgress,
 } from "@/db/schema";
 import type { RewardCollector } from "@/features/gamification/rewards";
 import { daysBetween } from "@/lib/time";
@@ -31,18 +33,27 @@ export async function getBadgeStats(db: DbOrTx, userId: string): Promise<BadgeSt
     .select({ qualifiedDays: count() })
     .from(studentDailyActivity)
     .where(and(eq(studentDailyActivity.userId, userId), eq(studentDailyActivity.qualified, true)));
+  // Vocabulary badges count ONLY the Noon-bank-derived, approved vocabulary.
   const [words] = await db
     .select({
-      learned: sql<number>`count(*) filter (where ${studentWordProgress.correctCount} > 0)::int`,
-      mastered: sql<number>`count(*) filter (where ${studentWordProgress.state} = 'mastered')::int`,
-      synonymCorrect: sql<number>`coalesce(${sum(studentWordProgress.synonymCorrectCount)}, 0)::int`,
+      learned: sql<number>`count(*) filter (where ${studentVocabularyProgress.correctCount} > 0)::int`,
+      mastered: sql<number>`count(*) filter (where ${studentVocabularyProgress.state} = 'mastered')::int`,
     })
-    .from(studentWordProgress)
-    .where(eq(studentWordProgress.userId, userId));
+    .from(studentVocabularyProgress)
+    .where(eq(studentVocabularyProgress.userId, userId));
+  const [{ synonymCorrect }] = await db
+    .select({ synonymCorrect: sql<number>`count(*)::int` })
+    .from(gameSessionAnswers)
+    .innerJoin(gameSessions, eq(gameSessions.id, gameSessionAnswers.sessionId))
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessionAnswers.subskillId, "vo_synonym"), eq(gameSessionAnswers.isCorrect, true)));
   const [{ sessions }] = await db
     .select({ sessions: count() })
     .from(practiceSessions)
     .where(and(eq(practiceSessions.userId, userId), eq(practiceSessions.status, "completed")));
+  const [{ games }] = await db
+    .select({ games: count() })
+    .from(gameSessions)
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessions.status, "completed")));
 
   return {
     qualifiedDays,
@@ -50,8 +61,8 @@ export async function getBadgeStats(db: DbOrTx, userId: string): Promise<BadgeSt
     longestStreak: profile?.longestStreak ?? 0,
     wordsLearned: words?.learned ?? 0,
     wordsMastered: words?.mastered ?? 0,
-    synonymCorrect: words?.synonymCorrect ?? 0,
-    sessionsCompleted: sessions,
+    synonymCorrect,
+    sessionsCompleted: sessions + games,
     comebackGapDays: lastTwo.length === 2 ? daysBetween(lastTwo[1].day, lastTwo[0].day) : 0,
   };
 }

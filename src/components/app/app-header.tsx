@@ -2,7 +2,7 @@ import { Flame, LogOut } from "lucide-react";
 import Link from "next/link";
 import { brand } from "@/config/brand";
 import { Num, Xp } from "@/components/ui/num";
-import { noonGoHref } from "@/features/noon-integration/urls";
+import { practiceHref } from "@/features/noon-practice/href";
 import { Avatar, NoonLogo } from "./brand-art";
 import { DesktopNav } from "./main-nav";
 import { NoonCta } from "./noon-cta";
@@ -45,12 +45,12 @@ export function AppHeader({
             <Xp value={xp} />
           </span>
           <NoonCta
-            href={noonGoHref("header")}
+            href={practiceHref("header")}
             size="sm"
             label="تدرب على نون"
             className="hidden md:inline-flex"
           />
-          <NoonCta href={noonGoHref("header_mobile")} size="sm" label="نون" className="md:hidden" />
+          <NoonCta href={practiceHref("header_mobile")} size="sm" label="نون" className="md:hidden" />
           {user.role === "admin" && (
             <Link
               href="/admin"

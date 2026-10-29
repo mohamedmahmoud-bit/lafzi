@@ -16,6 +16,7 @@ const ACTION_LABELS: Record<XpAction, string> = {
   mission_completed: "إكمال مهمة اليوم",
   noon_practice_clicked: "التدريب على نون",
   streak_milestone: "إنجاز السلسلة",
+  game_completed: "إنهاء لعبة",
 };
 
 /** The single "reward moment" after a meaningful action. */

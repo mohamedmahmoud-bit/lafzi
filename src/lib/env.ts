@@ -28,13 +28,19 @@ const schema = z.object({
   NOON_AUTH_STUDENT_ID_CLAIM: z.string().default("sub"),
   NOON_AUTH_NAME_CLAIM: z.string().default("name"),
   ADMIN_NOON_STUDENT_IDS: z.string().default(""),
-  NOON_LEARNING_PROVIDER: z.enum(["mock", "http", "none"]).default("mock"),
-  NOON_API_BASE_URL: z.string().optional(),
-  NOON_API_TIMEOUT_MS: z.coerce.number().int().positive().default(2500),
-  NOON_PRACTICE_URL_TEMPLATE: z.string().optional(),
-  NOON_HEATMAP_URL: z.string().optional(),
-  NOON_SKILL_ID_MAP: z.string().optional(),
   STREAK_FREEZE_ENABLED: bool,
+  // ─── Noon question bank (single source of truth for assessment content) ───
+  NOON_QB_PROVIDER: z.enum(["none", "mock", "http", "file"]).default("none"),
+  NOON_QB_BASE_URL: z.string().optional(),
+  NOON_QB_TOKEN: z.string().optional(),
+  NOON_QB_SEARCH_PATH: z.string().optional(),
+  NOON_QB_DETAIL_PATH: z.string().default("/questions/{id}"),
+  NOON_QB_IMPORT_FILE: z.string().optional(),
+  /** Comma list of Noon chapter ids to reconcile; default = every verbal chapter. */
+  NOON_QB_CHAPTERS: z.string().default("2854,2855,2856,2857,2858,2859,5505"),
+  CRON_SECRET: z.string().optional(),
+  // ─── Noon practice deep links ───
+  NOON_PRACTICE_ALLOWED_HOSTS: z.string().default("student.noonacademy.com,student.noon.edu.sa,student.school.studyatnoon.com"),
   ANALYTICS_SINKS: z.string().default("db"),
 });
 

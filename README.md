@@ -6,16 +6,21 @@ A gamified daily companion for Saudi high-school students preparing for the **Ar
 > Learn a little every day → build vocabulary → keep the streak → find weak skills →
 > **go back to Noon and practise exactly those skills.**
 
-The core loop (all working in the MVP):
+The core loop:
 
 ```
-Login → مهمة اليوم → كلمة اليوم (guess → card → recall) → mini session (≈9 cards)
-      → XP + streak + level/badges → "محتاج تركز على إيه؟" → «تدرب على نقاط ضعفك في نون» (/go/noon)
+Login → مهمة اليوم → كلمة اليوم (a real Noon question) + لعبة اليوم (6 games on the Noon bank)
+      → XP + streak + level/badges + weekly topic challenge
+      → weakest subskill (local) → ذاكر مع نون → play again → «تدرب على نون» (verified links only)
 ```
 
-Teaching approach: every word is **derived before it is explained**. The student first guesses
-the meaning from context, then sees the card, then the card is hidden and they retrieve it
-(retrieval practice). New words in sessions also start from context.
+**Content rule:** every question, answer, explanation and vocabulary word comes from the official
+Noon question bank — synced, validated and approved by a reviewer. Nothing is generated. When the
+bank has nothing published for a game, the student sees "content unavailable", not a substitute.
+
+Teaching approach: students reason before they are told — warm-up strategy prompts before a game,
+"why is the other option more precise?" after a mistake, the word of the day is met inside its
+original Noon question before its relation card is revealed.
 
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full architecture, database model,
 route map, Noon integration boundaries, gamification rules and the list of information needed
@@ -39,26 +44,24 @@ from Noon.
 
 ```
 src/
-  app/                    routes only (UI); (student) group, admin/, api/, go/noon
+  app/                    routes only (UI): (student) — /, /play, /study, /word-of-the-day…;
+                          admin/ (question-bank, vocabulary, integrations/noon, study…); api/; go/noon
   components/ui           design-system primitives (Button, Card, Progress, Pill, Num/Xp)
-  components/app          product components (header, nav, FocusCard, RewardPanel…)
-  config/brand.ts         brand placeholders (product name, fonts, avatars)
-  db/                     schema.ts, client, migrate, seed, reconcile-xp
+  components/app          product components (header, nav, ChoiceList, RewardPanel…)
+  db/                     schema.ts, client, migrate, seeds (content / platform / mock bank), reconcile-xp
   features/
-    auth/                 session (DB-backed), DAL guards, identity providers
-    daily-word/           كلمة اليوم selection + flow
-    vocabulary/           SRS engine, deck planner, question generator, sessions
-    gamification/         XP rules, XP ledger service, levels, reward collector
-    streaks/              pure streak math (Asia/Riyadh)
-    missions/             مهمة اليوم template + completion
-    badges/               criteria evaluators + award service
-    leaderboard/          weekly cohort ranking + snapshots
-    noon-integration/     learning adapters, skill registry, deep links, focus choice
-    analytics/            provider-independent analytics + product metrics
-    admin/                content management, CSV import, audit
-  lib/                    env, time (Riyadh), rate limiting, crypto, csv, utils
+    curriculum/           canonical taxonomy = Noon's verbal curriculum (official IDs)
+    question-bank/        provider adapters, normalise/hash, validation, sync, review pipeline, pool
+    games/                registry (A–F), pure engine (scoring/difficulty/mastery), sessions
+    word-bank/            vocabulary extraction from Noon questions, review, WOD
+    noon-practice/        allowlist/PII policy, verification status, resolver
+    study/                ذاكر مع نون resources + storage providers
+    competitions/         weekly topic challenges
+    auth/ gamification/ streaks/ missions/ badges/ leaderboard/ progress/ analytics/ admin/
+    vocabulary/ noon-integration/   legacy modules kept only for the static demo build
+  lib/                    env, time (Riyadh), rate limiting, crypto, utils
 tests/unit, tests/integration
-drizzle/                  generated SQL migrations
+drizzle/                  generated SQL migrations (additive)
 ```
 
 Business logic never lives in React components. Pure functions (streaks, XP, SRS, badges,
@@ -120,9 +123,10 @@ All configuration is via env vars (`src/lib/env.ts` validates them with Zod). Se
 | `AUTH_PROVIDER`                                                       | `mock` (dev only) or `oidc`                                         |
 | `NOON_AUTH_*`                                                         | Client id/secret, issuer, redirect URI, scopes, claim names         |
 | `ADMIN_NOON_STUDENT_IDS`                                              | Comma list of Noon ids that receive the admin role                  |
-| `NOON_LEARNING_PROVIDER`                                              | `mock` (dev only) / `http` / `none`                                 |
-| `NOON_API_BASE_URL`, `NOON_API_TIMEOUT_MS`                            | Heat-map API transport                                              |
-| `NOON_PRACTICE_URL_TEMPLATE`, `NOON_HEATMAP_URL`, `NOON_SKILL_ID_MAP` | Deep links (placeholders until Noon provides formats)               |
+| `NOON_QB_PROVIDER` (+ `NOON_QB_*`)                                    | Question-bank source: `none` / `mock` (dev) / `http` / `file`       |
+| `NOON_QB_CHAPTERS`                                                    | Noon chapter ids reconciled on each sync                            |
+| `CRON_SECRET`                                                         | Protects `/api/cron/question-sync`                                  |
+| `NOON_PRACTICE_ALLOWED_HOSTS`                                         | Only hosts a «تدرب على نون» link may ever open                      |
 | `STREAK_FREEZE_ENABLED`                                               | Feature flag for streak freezes (logic implemented, off by default) |
 | `ANALYTICS_SINKS`                                                     | `db,console` — add your own sink via `analytics.registerSink()`     |
 
@@ -169,31 +173,26 @@ service (`src/features/auth/providers/citadel.ts`).
 Other identity options stay available: `AUTH_PROVIDER=oidc` (generic OpenID Connect) and
 `mock` (local development only; refused in production).
 
-### Heat map / weak skills
+### Weak skills
 
-`NoonLearningIntegration` (`src/features/noon-integration/types.ts`):
+«محتاج تركز على إيه؟» uses the student's **local** performance per Noon subskill (`skill_progress`,
+updated by every game) and is always labelled as لفظي data, never as Noon's official heat map. No Noon
+API for reading a student's official skill map is available to this app yet.
 
-- `mock` — deterministic per-student data, always labelled **«بيانات تجريبية للتطوير»** in the UI.
-- `http` — transport, timeout, auth header and graceful fallback are implemented. Fill in
-  `skillSummaryPath()` and `mapNoonSkills()` in `http.ts` once Noon publishes the endpoint and
-  response format. Results are cached for 6 h in `noon_skill_snapshots`.
-- `none` — no heat map: the UI shows **«شاهد نقاط قوتك وضعفك على نون»** with a link, never fake data.
+### Noon practice links
 
-When Noon data is unavailable, the companion may show an _honest local signal_ derived from the
-student's own analogy / sentence-completion answers inside لفظي, labelled as such.
+All «تدرب على نون» buttons go through `GET /go/noon?src=…&topic=…&subskill=…`. The resolver tries
+**skill practice → heat map → general practice**, and returns only destinations that an admin added
+in `/admin/integrations/noon`, that pass the host allowlist and PII/token checks, and that have a
+recorded passing test for a signed-in desktop student (with no later failure). Otherwise the student
+sees an honest «لا يوجد رابط تدريب مباشر بعد» page. Every hand-off is logged in
+`outbound_practice_events`. Details: [docs/NOON_INTEGRATION.md](docs/NOON_INTEGRATION.md).
 
-### Configuring deep links
+### Question bank, games and vocabulary
 
-All Noon links go through `GET /go/noon?src=…&skill=…`, which records `noon_practice_clicked`
-(+ a once-per-day XP bonus after the mission is done) and then redirects to:
-
-1. `NOON_PRACTICE_URL_TEMPLATE` with `{skillId}` / `{studentId}` substituted (skill id mapped via
-   `NOON_SKILL_ID_MAP`), else
-2. `NOON_HEATMAP_URL`, else
-3. the dev placeholder page `/dev/noon-placeholder`.
-
-URLs come only from server config and must be `https:` — the route cannot be used as an open
-redirect. Local skill ids live in `src/features/noon-integration/skills.ts`.
+Every question a student sees is an official Noon question that was synced, validated and published
+by a reviewer; vocabulary is extracted from those questions and needs Noon-stated evidence plus human
+approval. See [docs/QUESTION_BANK.md](docs/QUESTION_BANK.md).
 
 ---
 
@@ -249,9 +248,14 @@ CSS variables in `src/app/globals.css` and the fonts in `src/app/layout.tsx` /
 
 ## Known limitations / next steps
 
-- Citadel token-request format to confirm against Noon's guide; heat-map API, deep-link formats, cohorts and practice-completion attribution all
-  need Noon input (ARCHITECTURE §7).
-- Seed vocabulary should be reviewed by Noon's verbal content team.
-- No push/email reminders yet (the biggest lever for D1/D7 retention once SSO exists).
-- The Docker image was not built in the development sandbox (no Docker daemon); the bundled
-  migrator and `next build` were verified separately.
+- **Question bank access:** the app runtime needs an authorised Noon question-bank endpoint (search
+  path + auth) or an approved export, and written confirmation that questions may be copied into a
+  companion app. Until then production runs with `NOON_QB_PROVIDER=none` and games show
+  "content unavailable". See docs/QUESTION_BANK.md.
+- **Practice links:** Noon has no documented skill-practice or heat-map link; nothing is marked
+  verified. See docs/NOON_INTEGRATION.md.
+- Games C, D and F are registered and their questions validate, but stay «قريبًا» until their UI is
+  reviewed (an admin can flip `game_types.status`).
+- Vercel Hobby only allows a daily cron; on Pro change `vercel.json` to `0 */6 * * *`.
+- The static demo (`demo-site/`) shows the earlier pre-question-bank version.
+- No push/email reminders yet.

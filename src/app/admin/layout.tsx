@@ -4,9 +4,10 @@ import { requireAdmin } from "@/features/auth/dal";
 
 const LINKS = [
   { href: "/admin", label: "المؤشرات" },
-  { href: "/admin/words", label: "الكلمات" },
-  { href: "/admin/import", label: "استيراد CSV" },
-  { href: "/admin/word-of-day", label: "كلمة اليوم" },
+  { href: "/admin/question-bank", label: "بنك الأسئلة" },
+  { href: "/admin/vocabulary", label: "المفردات" },
+  { href: "/admin/integrations/noon", label: "تكامل نون" },
+  { href: "/admin/study", label: "ذاكر مع نون" },
   { href: "/admin/badges", label: "الإنجازات" },
   { href: "/admin/xp-rules", label: "النقاط والمستويات" },
   { href: "/admin/audit", label: "سجل التدقيق" },

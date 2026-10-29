@@ -11,6 +11,7 @@ export const XP_ACTIONS = [
   "mission_completed",
   "noon_practice_clicked",
   "streak_milestone",
+  "game_completed",
 ] as const;
 
 export type XpAction = (typeof XP_ACTIONS)[number];
@@ -78,6 +79,13 @@ export const DEFAULT_XP_RULES: Record<XpAction, XpRule> = {
     xp: 10,
     dailyCap: null,
     description: "إنجاز سلسلة (٧/٣٠/١٠٠ يوم) — القيمة تتضاعف حسب المرحلة",
+    enabled: true,
+  },
+  game_completed: {
+    action: "game_completed",
+    xp: 12,
+    dailyCap: 60,
+    description: "إنهاء لعبة على أسئلة نون — تتضاعف حتى ×1.5 حسب الدقة",
     enabled: true,
   },
 };

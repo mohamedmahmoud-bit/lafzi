@@ -26,7 +26,7 @@ export default async function ProgressPage() {
     { icon: Flame, label: "أطول سلسلة", value: p.longestStreak, suffix: "يوم" },
     { icon: Zap, label: "XP هذا الأسبوع", value: p.weekXp },
     { icon: CalendarCheck, label: "أيام التعلّم", value: p.learningDays },
-    { icon: Layers, label: "جلسات تدريب", value: p.sessions },
+    { icon: Layers, label: "جولات مكتملة", value: p.sessions },
   ];
 
   return (
@@ -88,6 +88,8 @@ export default async function ProgressPage() {
         <StreakCalendar data={p.calendar} today={p.today} />
       </div>
 
+      <SkillMap local={p.local} />
+
       <Card>
         <div className="flex items-center justify-between">
           <CardTitle>إتقان المفردات</CardTitle>
@@ -96,7 +98,7 @@ export default async function ProgressPage() {
           </Link>
         </div>
         <CardHint>
-          تنتقل الكلمة من «جديدة» إلى «متقنة» كلما تذكّرتها بشكل صحيح على فترات متباعدة.
+          كلمات مستخرجة من أسئلة بنك نون ومعتمدة. تنتقل الكلمة من «جديدة» إلى «متقنة» كلما تذكّرتها على فترات متباعدة.
         </CardHint>
         <MasteryBar counts={p.mastery.counts} total={p.mastery.total} className="mt-4" />
       </Card>
@@ -195,6 +197,31 @@ function StreakCalendar({ data, today }: { data: ProgressData["calendar"]; today
           <span aria-hidden className="bg-surface-muted size-3 rounded" /> بلا نشاط
         </li>
       </ul>
+    </Card>
+  );
+}
+
+/** Local performance per subskill — explicitly NOT Noon's official heat map. */
+function SkillMap({ local }: { local: ProgressData["local"] }) {
+  return (
+    <Card>
+      <CardTitle>مهاراتك في لفظي</CardTitle>
+      <CardHint>من إجاباتك في ألعاب لفظي فقط — خريطة نون الرسمية لمهاراتك موجودة في منصة نون.</CardHint>
+      {local.skills.length === 0 ? (
+        <p className="text-muted mt-3 text-sm">العب جولة واحدة لتظهر مهاراتك هنا.</p>
+      ) : (
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+          {local.skills.map((s) => (
+            <li key={s.subskillId}>
+              <div className="flex justify-between gap-2 text-sm">
+                <span className="font-semibold">{s.nameAr}</span>
+                <span className="text-muted text-xs">{s.topicName} · <Num value={s.correct} />/<Num value={s.attempts} /></span>
+              </div>
+              <Progress value={Math.round(s.mastery * 100)} max={100} label={`إتقان ${s.nameAr}`} className="mt-1 h-2" />
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

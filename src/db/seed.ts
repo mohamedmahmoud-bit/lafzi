@@ -1,6 +1,7 @@
 /**
  * Development seed. Wipes all application tables and inserts:
- * vocabulary (63 words), badges, levels, XP rules, a DEVELOPMENT cohort with mock classmates,
+ * taxonomy + game types + config, the MOCK question bank (through the real sync/review pipeline),
+ * dev-only Study Hub examples, a DEVELOPMENT cohort with mock classmates,
  * a demo student with a 4-day streak ending yesterday, an admin, and some analytics history.
  *
  *   npm run db:seed
@@ -9,12 +10,12 @@ import "dotenv/config";
 import { sql } from "drizzle-orm";
 import { createDb } from "./client";
 import * as s from "./schema";
-import { MOCK_CLASSMATES, SEED_BADGES, SEED_WORDS } from "./seed-data/words";
-import { DEFAULT_LEVELS, levelFor } from "../features/gamification/levels";
-import { DEFAULT_XP_RULES } from "../features/gamification/xp-rules";
-import { BOX_INTERVAL_DAYS, stateFor } from "../features/vocabulary/srs";
+import { MOCK_CLASSMATES } from "./seed-data/words";
+import { seedDevStudyExamples, seedMockQuestionBank } from "./seed-mock-bank";
+import { seedPlatformConfig } from "./seed-platform";
+import { levelFor } from "../features/gamification/levels";
 import { addDays, learningDay, startOfLearningDay } from "../lib/time";
-import { normalizeArabic, seededRandom } from "../lib/utils";
+import { seededRandom } from "../lib/utils";
 
 const DAY_MS = 86_400_000;
 
@@ -25,6 +26,23 @@ async function main() {
   const rand = seededRandom(20261025);
 
   const tables = [
+    "noon_questions",
+    "reading_passages",
+    "question_sync_runs",
+    "curriculum_nodes",
+    "game_sessions",
+    "game_types",
+    "competitions",
+    "daily_challenges",
+    "skill_progress",
+    "noon_skill_mappings",
+    "noon_practice_destinations",
+    "outbound_practice_events",
+    "vocabulary_entries",
+    "vocabulary_word_of_day",
+    "study_resources",
+    "study_collections",
+    "verbal_topics",
     "analytics_events",
     "audit_events",
     "rate_limit_buckets",
@@ -52,55 +70,14 @@ async function main() {
   ];
   await db.execute(sql.raw(`TRUNCATE ${tables.join(", ")} CASCADE`));
 
-  // ── Config ────────────────────────────────────────────────────────────
-  await db.insert(s.levels).values(DEFAULT_LEVELS);
-  await db.insert(s.xpRules).values(Object.values(DEFAULT_XP_RULES));
-  const badgeRows = await db
-    .insert(s.badges)
-    .values(SEED_BADGES.map((b) => ({ ...b })))
-    .returning();
+  // ── Config (same as production) ───────────────────────────────────
+  await seedPlatformConfig(db);
+  const badgeRows = await db.select().from(s.badges);
   const badgeByCode = new Map(badgeRows.map((b) => [b.code, b]));
 
-  // ── Vocabulary ────────────────────────────────────────────────────────
-  const words = await db
-    .insert(s.vocabularyWords)
-    .values(
-      SEED_WORDS.map((w) => ({
-        word: w.word,
-        normalizedWord: normalizeArabic(w.word),
-        meaning: w.meaning,
-        example: w.example,
-        relationNote: w.relationNote ?? null,
-        difficulty: w.difficulty,
-        category: w.category,
-      })),
-    )
-    .returning();
-  const wordByText = new Map(words.map((w) => [w.word, w]));
-  await db
-    .insert(s.wordSynonyms)
-    .values(
-      SEED_WORDS.flatMap((w) =>
-        w.synonyms.map((value) => ({ wordId: wordByText.get(w.word)!.id, value })),
-      ),
-    );
-  await db
-    .insert(s.wordAntonyms)
-    .values(
-      SEED_WORDS.flatMap((w) =>
-        w.antonyms.map((value) => ({ wordId: wordByText.get(w.word)!.id, value })),
-      ),
-    );
-
-  // Word of the day: today is scheduled manually (shows the admin scheduling path); past days auto.
-  const wodPlan = ["أناة", "وئام", "ثابر", "جلي", "شاسع"];
-  await db.insert(s.wordOfDay).values(
-    wodPlan.map((w, i) => ({
-      day: addDays(today, -i),
-      wordId: wordByText.get(w)!.id,
-      source: i === 0 ? ("manual" as const) : ("auto" as const),
-    })),
-  );
+  // ── MOCK question bank through the real pipeline (dev only) ──────────
+  const bank = await seedMockQuestionBank(db);
+  await seedDevStudyExamples(db);
 
   // ── Cohort + users ────────────────────────────────────────────────────
   const [cohort] = await db
@@ -226,32 +203,7 @@ async function main() {
     });
   }
 
-  // 22 words met; a few due today so the deck has reviews. Today's word stays new.
   const now = Date.now();
-  const learned = SEED_WORDS.filter((w) => !wodPlan.slice(0, 1).includes(w.word)).slice(0, 22);
-  await db.insert(s.studentWordProgress).values(
-    learned.map((w, i) => {
-      const box = [1, 2, 2, 3, 3, 4, 5, 5][i % 8];
-      const correctCount = box + (box === 5 ? 1 : 0);
-      const due = i % 4 === 0;
-      return {
-        userId: demo.id,
-        wordId: wordByText.get(w.word)!.id,
-        box,
-        state: stateFor(box, correctCount),
-        exposureCount: correctCount + (i % 3),
-        correctCount,
-        incorrectCount: i % 3,
-        synonymCorrectCount: Math.floor(correctCount / 3),
-        masteryScore: Math.min(100, box * 20 - (i % 3) * 10),
-        lastSeenAt: new Date(now - (BOX_INTERVAL_DAYS[box] + 1) * DAY_MS),
-        nextReviewAt: new Date(due ? now - 3_600_000 : now + BOX_INTERVAL_DAYS[box] * DAY_MS),
-      };
-    }),
-  );
-  const masteredCount = learned.filter((_, i) =>
-    [5].includes([1, 2, 2, 3, 3, 4, 5, 5][i % 8]),
-  ).length;
 
   await db.insert(s.studentProfiles).values({
     userId: demo.id,
@@ -264,8 +216,8 @@ async function main() {
     currentStreak: 4,
     longestStreak: 6,
     lastQualifiedDate: addDays(today, -1),
-    totalWordsLearned: learned.length,
-    masteredWords: masteredCount,
+    totalWordsLearned: 0,
+    masteredWords: 0,
     lastActivityAt: new Date(now - DAY_MS),
   });
   await db.insert(s.studentBadges).values([
@@ -362,11 +314,9 @@ async function main() {
 
   await pool.end();
   console.log(
-    `✓ seeded ${words.length} words, ${badgeRows.length} badges, ${MOCK_CLASSMATES.length} classmates`,
+    `✓ seeded MOCK bank: sync ${bank.run.status} ${JSON.stringify(bank.run.stats)}, ${bank.published} published, ${bank.approvedRelations} relations approved`,
   );
-  console.log(
-    `  demo student: سارة — streak 4 (ending yesterday), ${demoXp} XP. Today's word: ${wodPlan[0]}`,
-  );
+  console.log(`  ${badgeRows.length} badges, ${MOCK_CLASSMATES.length} classmates; demo student: سارة — streak 4, ${demoXp} XP`);
 }
 
 main().catch((err) => {

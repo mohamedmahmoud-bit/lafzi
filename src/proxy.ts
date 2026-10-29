@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/health", "/dev/noon-placeholder"];
+const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/health", "/api/cron"];
 
 /**
  * Optimistic gate only: redirects visitors without a session cookie to /login.

@@ -17,6 +17,11 @@ export const ANALYTICS_EVENTS = [
   "noon_heatmap_cta_viewed",
   "noon_heatmap_cta_clicked",
   "noon_practice_clicked",
+  "noon_practice_unavailable",
+  "game_started",
+  "game_completed",
+  "study_resource_opened",
+  "question_bank_synced",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];

@@ -1,5 +1,11 @@
 # لفظي — Architecture & MVP Plan
 
+> **Update (question-bank platform):** content now comes only from the Noon question bank and
+> practice links only from verified destinations. See [QUESTION_BANK.md](QUESTION_BANK.md) and
+> [NOON_INTEGRATION.md](NOON_INTEGRATION.md); those documents supersede the vocabulary, deep-link
+> and skill-id sections below (template URLs and `NOON_SKILL_ID_MAP` were removed).
+
+
 > Status: MVP. Everything marked **[NOON-REQUIRED]** needs real information from Noon Academy
 > before production. Until then a clearly-labelled development adapter is used.
 

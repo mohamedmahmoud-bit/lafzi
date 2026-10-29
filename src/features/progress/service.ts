@@ -2,16 +2,37 @@ import "server-only";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
+  gameSessions,
   practiceSessions,
   studentDailyActivity,
   studentProfiles,
+  studentVocabularyProgress,
+  vocabularyEntries,
   xpTransactions,
 } from "@/db/schema";
-import { getMasteryBreakdown } from "@/features/dashboard/service";
+import type { MasteryState } from "@/features/vocabulary/srs";
+import { getLocalSkills } from "./skills";
 import { levelFor } from "@/features/gamification/levels";
 import { getLevels } from "@/features/gamification/xp.service";
 import { displayStreak } from "@/features/streaks/streak";
 import { addDays, lastNDays, learningDay, weekRange } from "@/lib/time";
+
+/** Mastery over the APPROVED, Noon-bank-derived vocabulary only. */
+export async function getMasteryBreakdown(userId: string) {
+  const db = getDb();
+  const rows = await db
+    .select({ state: studentVocabularyProgress.state, n: sql<number>`count(*)::int` })
+    .from(studentVocabularyProgress)
+    .innerJoin(vocabularyEntries, eq(vocabularyEntries.id, studentVocabularyProgress.entryId))
+    .where(and(eq(studentVocabularyProgress.userId, userId), eq(vocabularyEntries.status, "approved")))
+    .groupBy(studentVocabularyProgress.state);
+  const [{ total }] = await db.select({ total: sql<number>`count(*)::int` }).from(vocabularyEntries).where(eq(vocabularyEntries.status, "approved"));
+  const counts: Record<MasteryState, number> = { new: 0, learning: 0, familiar: 0, mastered: 0 };
+  for (const r of rows) counts[r.state] = r.n;
+  const seen = counts.learning + counts.familiar + counts.mastered + counts.new;
+  counts.new += Math.max(0, total - seen);
+  return { counts, total };
+}
 
 export async function getProgress(userId: string) {
   const db = getDb();
@@ -38,6 +59,10 @@ export async function getProgress(userId: string) {
     .select({ sessions: sql<number>`count(*)::int` })
     .from(practiceSessions)
     .where(and(eq(practiceSessions.userId, userId), eq(practiceSessions.status, "completed")));
+  const [{ games }] = await db
+    .select({ games: sql<number>`count(*)::int` })
+    .from(gameSessions)
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessions.status, "completed")));
   const week = weekRange(today);
   const [{ weekXp }] = await db
     .select({ weekXp: sql<number>`coalesce(sum(${xpTransactions.xp}), 0)::int` })
@@ -56,7 +81,8 @@ export async function getProgress(userId: string) {
     xpTotal: profile.xpTotal,
     weekXp,
     learningDays,
-    sessions,
+    sessions: sessions + games,
+    local: await getLocalSkills(userId),
     wordsLearned: profile.totalWordsLearned,
     masteredWords: profile.masteredWords,
     mastery: await getMasteryBreakdown(userId),
