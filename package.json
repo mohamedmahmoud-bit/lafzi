@@ -19,7 +19,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed:content": "tsx src/db/seed-content.ts",
     "vercel-build": "npm run db:migrate && npm run db:seed:content && next build",
-    "demo:build": "node demo/build.mjs demo/lafzi-demo.html node_modules/.bin/tailwindcss"
+    "demo:build": "node demo/build.mjs demo/lafzi-demo.html node_modules/.bin/tailwindcss && node demo/site.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
