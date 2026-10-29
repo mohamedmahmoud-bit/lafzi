@@ -40,8 +40,8 @@ export default async function PracticePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <header>
-        <p className="text-primary text-sm font-semibold">تدريب الكلمات</p>
-        <h1 className="text-2xl font-bold">{dailyDone ? "أنهيت تدريب اليوم 👏" : "تدريب اليوم"}</h1>
+        <p className="text-secondary text-sm font-semibold">تدريب الكلمات</p>
+        <h1 className="text-2xl font-bold">{dailyDone ? "أنهيت تدريب اليوم" : "تدريب اليوم"}</h1>
         <p className="text-muted">
           {dailyDone
             ? "تقدر تراجع كلماتك الأضعف الآن، أو تكمل يومك بالتدرب على نون."
@@ -109,7 +109,7 @@ export default async function PracticePage() {
         </form>
       )}
       <p className="text-center text-sm">
-        <Link href="/words" className="text-primary font-medium">
+        <Link href="/words" className="text-primary-ink font-medium">
           تصفّح بنك الكلمات
         </Link>
       </p>
@@ -130,7 +130,7 @@ function DeckItem({
     <li className="flex items-center gap-3 sm:flex-col sm:items-start">
       <span
         aria-hidden
-        className="bg-primary-soft text-primary grid size-10 place-items-center rounded-xl"
+        className="bg-primary-soft text-primary-ink grid size-10 place-items-center rounded-xl"
       >
         {icon}
       </span>

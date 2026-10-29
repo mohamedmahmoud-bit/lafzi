@@ -22,7 +22,7 @@ export function NoonCta({
       href={href}
       prefetch={false}
       className={cn(
-        "bg-noon text-noon-foreground inline-flex items-center justify-center gap-2 rounded-[calc(var(--brand-radius)*0.8)] font-bold shadow-sm transition hover:brightness-125 active:scale-[0.98]",
+        "bg-noon text-noon-foreground inline-flex items-center justify-center gap-2 rounded-[calc(var(--brand-radius)*0.8)] font-bold transition hover:brightness-125 active:scale-[0.98]",
         size === "sm" && "h-9 px-3 text-sm",
         size === "md" && "h-11 px-5",
         size === "lg" && "h-13 w-full px-6 text-base",

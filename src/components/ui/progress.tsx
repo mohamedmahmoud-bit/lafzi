@@ -22,7 +22,7 @@ export function Progress({
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={value}
-      className={cn("bg-surface-muted h-2.5 w-full overflow-hidden rounded-full", className)}
+      className={cn("bg-oak h-2.5 w-full overflow-hidden rounded-full", className)}
     >
       <div
         className={cn(

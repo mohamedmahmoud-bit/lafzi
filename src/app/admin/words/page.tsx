@@ -67,7 +67,7 @@ export default async function AdminWords({ searchParams }: PageProps<"/admin/wor
                   <form action={toggleWordAction}>
                     <input type="hidden" name="id" value={w.id} />
                     <input type="hidden" name="active" value={String(!w.active)} />
-                    <button className="text-primary text-sm">{w.active ? "تعطيل" : "تفعيل"}</button>
+                    <button className="text-primary-ink text-sm">{w.active ? "تعطيل" : "تفعيل"}</button>
                   </form>
                 </td>
               </tr>

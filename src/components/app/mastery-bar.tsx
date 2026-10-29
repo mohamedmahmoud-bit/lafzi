@@ -3,10 +3,11 @@ import { MASTERY_LABELS, type MasteryState } from "@/features/vocabulary/srs";
 import { cn } from "@/lib/utils";
 
 const COLORS: Record<MasteryState, string> = {
-  mastered: "bg-success",
-  familiar: "bg-primary",
-  learning: "bg-xp",
-  new: "bg-surface-muted",
+  // Brand chart palette order: terracotta, espresso, clay; oak for the unfilled share.
+  mastered: "bg-primary",
+  familiar: "bg-foreground",
+  learning: "bg-clay",
+  new: "bg-oak",
 };
 const ORDER: MasteryState[] = ["mastered", "familiar", "learning", "new"];
 
@@ -22,7 +23,7 @@ export function MasteryBar({
   return (
     <div className={className}>
       <div
-        className="bg-surface-muted flex h-3 w-full gap-[2px] overflow-hidden rounded-full"
+        className="bg-oak flex h-3 w-full gap-[2px] overflow-hidden rounded-full"
         aria-hidden
       >
         {ORDER.map((s) => (

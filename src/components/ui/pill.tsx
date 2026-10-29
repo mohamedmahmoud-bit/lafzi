@@ -8,7 +8,7 @@ const pill = cva(
     variants: {
       tone: {
         neutral: "bg-surface-muted text-muted",
-        primary: "bg-primary-soft text-primary",
+        primary: "bg-primary-soft text-primary-ink",
         xp: "bg-xp-soft text-xp",
         streak: "bg-streak-soft text-streak",
         success: "bg-success-soft text-success",

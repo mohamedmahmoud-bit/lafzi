@@ -43,7 +43,7 @@ export function BadgeIcon({
       className={cn(
         "grid size-12 shrink-0 place-items-center rounded-2xl",
         earned
-          ? "from-xp-soft to-streak-soft text-xp bg-gradient-to-br"
+          ? "bg-primary-soft text-primary-ink"
           : "bg-surface-muted text-muted",
         className,
       )}

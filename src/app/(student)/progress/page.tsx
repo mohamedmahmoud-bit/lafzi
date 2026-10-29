@@ -32,7 +32,7 @@ export default async function ProgressPage() {
   return (
     <div className="space-y-4">
       <header>
-        <p className="text-primary text-sm font-semibold">تقدمي</p>
+        <p className="text-secondary text-sm font-semibold">تقدمي</p>
         <h1 className="text-2xl font-bold">أنت تتحسّن كل يوم</h1>
       </header>
 
@@ -44,7 +44,7 @@ export default async function ProgressPage() {
             </p>
             <p className="text-lg font-bold">{p.level.current.name}</p>
           </div>
-          <p className="text-xp text-xl font-bold">
+          <p className="font-num text-primary-ink text-2xl font-bold">
             <Xp value={p.xpTotal} />
           </p>
         </div>
@@ -53,7 +53,7 @@ export default async function ProgressPage() {
           max={p.level.next ? p.level.next.minXp - p.level.current.minXp : 1}
           label="التقدم نحو المستوى التالي"
           className="mt-3"
-          barClassName="bg-xp"
+          barClassName="bg-primary"
         />
         <CardHint className="mt-2">
           {p.level.next ? (
@@ -70,9 +70,9 @@ export default async function ProgressPage() {
         {tiles.map((t) => (
           <li key={t.label}>
             <Card className="h-full p-4">
-              <t.icon aria-hidden className="text-primary size-5" />
+              <t.icon aria-hidden className="text-primary-ink size-5" />
               <p className="mt-2 text-2xl font-bold">
-                <Num value={t.value} />
+                <Num value={t.value} className="font-num tabular-nums" />
                 {t.suffix && (
                   <span className="text-muted ms-1 text-sm font-medium">{t.suffix}</span>
                 )}
@@ -91,7 +91,7 @@ export default async function ProgressPage() {
       <Card>
         <div className="flex items-center justify-between">
           <CardTitle>إتقان المفردات</CardTitle>
-          <Link href="/words" className="text-primary text-sm font-medium">
+          <Link href="/words" className="text-primary-ink text-sm font-medium">
             بنك الكلمات
           </Link>
         </div>
@@ -180,7 +180,7 @@ function StreakCalendar({ data, today }: { data: ProgressData["calendar"]; today
               d.day === today && "ring-primary ring-offset-surface ring-2 ring-offset-2",
             )}
           >
-            {d.qualified ? "🔥" : Number(d.day.slice(8))}
+            {d.qualified ? <Flame aria-hidden className="size-4" /> : Number(d.day.slice(8))}
           </li>
         ))}
       </ol>

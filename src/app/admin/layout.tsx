@@ -22,7 +22,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     <div className="min-h-dvh">
       <header className="border-border bg-surface border-b">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <Link href="/admin" className="font-display text-primary text-xl font-bold">
+          <Link href="/admin" className="font-display text-primary-ink text-xl font-bold">
             {brand.productName} · الإدارة
           </Link>
           <nav aria-label="تنقل الإدارة" className="flex flex-wrap gap-1 text-sm">
@@ -37,7 +37,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             ))}
           </nav>
           <span className="text-muted ms-auto text-sm">{admin.displayName}</span>
-          <Link href="/" className="text-primary text-sm">
+          <Link href="/" className="text-primary-ink text-sm">
             واجهة الطالب
           </Link>
         </div>

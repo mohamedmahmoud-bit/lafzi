@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
+import { LoginHero } from "@/components/app/login-hero";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
-import { brand } from "@/config/brand";
 import { getCurrentUser } from "@/features/auth/dal";
 import { getIdentityProvider, isMockAuth } from "@/features/auth/providers";
 import { MOCK_PERSONAS } from "@/features/auth/providers/mock";
@@ -29,11 +29,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
-      <div className="text-center">
-        <p className="font-display text-primary text-5xl font-bold">{brand.productName}</p>
-        <p className="mt-2 text-lg font-semibold">{brand.productTagline}</p>
-        <p className="text-muted mt-1">كلمات جديدة كل يوم · سلسلة تحفّزك · تدريب موجّه في نون</p>
-      </div>
+      <LoginHero />
 
       {typeof error === "string" && ERRORS[error] && (
         <p role="alert" className="bg-danger-soft text-danger rounded-xl px-4 py-3 text-sm">
@@ -60,7 +56,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       ) : (
         <Card className="border-xp border-dashed">
           <Pill tone="dev">وضع التطوير المحلي</Pill>
-          <h1 className="mt-2 text-lg font-bold">دخول تجريبي — ليس تسجيل دخول نون</h1>
+          <h2 className="mt-2 text-lg font-bold">دخول تجريبي — ليس تسجيل دخول نون</h2>
           <p className="text-muted mt-1 text-sm">
             تسجيل الدخول الحقيقي عبر نون غير مفعّل بعد. اختر شخصية تجريبية لتجربة المنتج.
           </p>

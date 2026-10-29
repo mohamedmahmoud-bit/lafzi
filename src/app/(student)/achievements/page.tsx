@@ -20,7 +20,7 @@ export default async function AchievementsPage() {
   return (
     <div className="space-y-4">
       <header>
-        <p className="text-primary text-sm font-semibold">الإنجازات</p>
+        <p className="text-secondary text-sm font-semibold">الإنجازات</p>
         <h1 className="text-2xl font-bold">
           حصلت على <Num value={earned} /> من <Num value={badges.length} /> إنجازات
         </h1>

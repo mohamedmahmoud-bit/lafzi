@@ -5,6 +5,7 @@ import { Num, Xp } from "@/components/ui/num";
 import type { RewardSummary } from "@/features/gamification/rewards";
 import type { XpAction } from "@/features/gamification/xp-rules";
 import { BadgeIcon } from "./badge-icon";
+import { Illustration } from "./brand-art";
 
 const ACTION_LABELS: Record<XpAction, string> = {
   wod_opened: "فتح كلمة اليوم",
@@ -22,12 +23,15 @@ export function RewardPanel({ reward }: { reward: RewardSummary }) {
   const streakUp = reward.streak?.extended;
   return (
     <div className="animate-rise space-y-3" role="status" aria-live="polite">
+      {reward.missionCompleted && (
+        <Illustration name="scene_celebration" className="mx-auto -mb-6 h-auto w-full max-w-sm" />
+      )}
       {reward.totalXp > 0 && (
-        <div className="animate-pop rounded-brand from-xp-soft to-streak-soft bg-gradient-to-l p-5 text-center">
-          <p className="text-xp text-4xl font-bold">
+        <div className="animate-pop rounded-brand bg-primary text-primary-foreground p-5 text-center">
+          <p className="font-num text-5xl font-bold">
             <Xp value={reward.totalXp} plus />
           </p>
-          <ul className="text-muted mt-2 space-y-0.5 text-sm">
+          <ul className="mt-2 space-y-0.5 text-sm text-white">
             {reward.awards.map((a, i) => (
               <li key={i}>
                 {ACTION_LABELS[a.action]} · <bdi dir="ltr">+{a.xp}</bdi>
@@ -51,7 +55,7 @@ export function RewardPanel({ reward }: { reward: RewardSummary }) {
         </p>
       )}
       {reward.levelUp && (
-        <p className="bg-primary-soft text-primary flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold">
+        <p className="bg-primary-soft text-primary-ink flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold">
           <TrendingUp aria-hidden className="size-5" /> مستوى جديد: {reward.levelUp.name}
         </p>
       )}

@@ -18,7 +18,7 @@ export function DesktopNav() {
             aria-current={active ? "page" : undefined}
             className={cn(
               "text-muted hover:text-foreground rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-              active && "bg-primary-soft text-primary",
+              active && "bg-primary-soft text-primary-ink",
             )}
           >
             {item.label}
@@ -47,7 +47,7 @@ export function BottomNav() {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "text-muted flex flex-col items-center gap-0.5 py-2 text-[0.7rem] font-medium",
-                  active && "text-primary",
+                  active && "text-primary-ink",
                 )}
               >
                 <Icon aria-hidden className="size-5" strokeWidth={active ? 2.4 : 1.8} />

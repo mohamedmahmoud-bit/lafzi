@@ -1,8 +1,9 @@
 import { Flame, LogOut } from "lucide-react";
 import Link from "next/link";
-import { avatarEmoji, brand } from "@/config/brand";
+import { brand } from "@/config/brand";
 import { Num, Xp } from "@/components/ui/num";
 import { noonGoHref } from "@/features/noon-integration/urls";
+import { Avatar, NoonLogo } from "./brand-art";
 import { DesktopNav } from "./main-nav";
 import { NoonCta } from "./noon-cta";
 
@@ -16,15 +17,16 @@ export function AppHeader({
   xp: number;
 }) {
   return (
-    <header className="border-border bg-background/90 sticky top-0 z-30 border-b backdrop-blur">
+    <header className="border-border bg-background sticky top-0 z-30 border-b">
       <div className="mx-auto flex h-15 max-w-6xl items-center gap-3 px-4">
         <Link
           href="/"
-          className="flex items-baseline gap-2"
-          aria-label={`${brand.productName} — الرئيسية`}
+          className="flex items-center gap-2.5"
+          aria-label={`${brand.productName} من نون — الرئيسية`}
         >
-          <span className="font-display text-primary text-2xl font-bold">{brand.productName}</span>
-          <span className="text-muted hidden text-xs sm:inline">مع {brand.partnerName}</span>
+          <span className="font-display text-primary-ink text-[1.7rem] leading-none font-bold">{brand.productName}</span>
+          <span aria-hidden className="bg-border hidden h-5 w-px sm:block" />
+          <NoonLogo width={64} className="hidden sm:block" />
         </Link>
         <DesktopNav />
         <div className="ms-auto flex items-center gap-2">
@@ -57,12 +59,7 @@ export function AppHeader({
               الإدارة
             </Link>
           )}
-          <span
-            aria-hidden
-            className="bg-surface-muted grid size-9 place-items-center rounded-full text-lg"
-          >
-            {avatarEmoji(user.avatar)}
-          </span>
+          <Avatar avatar={user.avatar} size={36} />
           <form action="/api/auth/logout" method="post">
             <button
               type="submit"

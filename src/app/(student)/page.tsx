@@ -44,7 +44,7 @@ export default async function DashboardPage() {
         <Card>
           <div className="flex items-center justify-between">
             <CardTitle>حصيلتك من الكلمات</CardTitle>
-            <Link href="/words" className="text-primary text-sm font-medium">
+            <Link href="/words" className="text-primary-ink text-sm font-medium">
               بنك الكلمات
             </Link>
           </div>
@@ -77,10 +77,10 @@ export default async function DashboardPage() {
 
 function streakHeadline(d: DashboardData) {
   const { count, status } = d.streak;
-  if (status === "done_today") return `🔥 ${count} أيام متتالية — أنجزت يومك`;
-  if (status === "at_risk") return `🔥 استمر في سلسلتك — اليوم ${ordinal(count + 1)}`;
-  if (status === "broken") return "ابدأ سلسلة جديدة اليوم 🔥";
-  return "ابدأ أول يوم في سلسلتك 🔥";
+  if (status === "done_today") return `${count} أيام متتالية — أنجزت يومك`;
+  if (status === "at_risk") return `استمر في سلسلتك — اليوم ${ordinal(count + 1)}`;
+  if (status === "broken") return "ابدأ سلسلة جديدة اليوم";
+  return "ابدأ أول يوم في سلسلتك";
 }
 
 const ORDINALS = [
@@ -108,7 +108,7 @@ function MissionHero({ d }: { d: DashboardData }) {
       <div
         className={cn(
           "px-5 pt-5 pb-4",
-          done ? "bg-success-soft" : "from-primary-soft to-surface bg-gradient-to-l",
+          done ? "bg-success-soft" : "bg-surface-muted",
         )}
       >
         <p className="text-streak flex items-center gap-1.5 text-sm font-semibold">
@@ -183,7 +183,7 @@ function WordTeaser({ d }: { d: DashboardData }) {
       <Card className="group-hover:border-primary/40 flex items-center gap-4 transition">
         <span
           aria-hidden
-          className="bg-primary-soft text-primary grid size-11 place-items-center rounded-xl"
+          className="bg-primary-soft text-primary-ink grid size-11 place-items-center rounded-xl"
         >
           <Sparkles className="size-5" />
         </span>
@@ -194,7 +194,7 @@ function WordTeaser({ d }: { d: DashboardData }) {
             {d.wod.meaning ?? "هل تستطيع استنتاج معناها من السياق؟"}
           </p>
         </div>
-        <span className="text-primary text-sm font-semibold">
+        <span className="text-primary-ink text-sm font-semibold">
           {d.wod.completed ? "راجعها" : d.wod.guessed ? "أكمل" : "خمّن"}
         </span>
       </Card>
@@ -213,7 +213,7 @@ function LevelCard({ d }: { d: DashboardData }) {
           </p>
           <p className="text-lg font-bold">{l.current.name}</p>
         </div>
-        <p className="text-xp text-xl font-bold">
+        <p className="font-num text-primary-ink text-2xl font-bold">
           <Xp value={d.profile.xpTotal} />
         </p>
       </div>
@@ -222,7 +222,7 @@ function LevelCard({ d }: { d: DashboardData }) {
         max={l.next ? l.next.minXp - l.current.minXp : 1}
         label="التقدم نحو المستوى التالي"
         className="mt-3"
-        barClassName="bg-xp"
+        barClassName="bg-primary"
       />
       <CardHint className="mt-2">
         {l.next ? (

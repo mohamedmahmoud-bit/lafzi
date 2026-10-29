@@ -1,12 +1,13 @@
-import { ArrowUpLeft, BookOpenText, Brain, Repeat, RotateCcw, Swords, Users } from "lucide-react";
+import { BookOpenText, Brain, Repeat, RotateCcw, Swords, Users } from "lucide-react";
 import Link from "next/link";
 import { AppHeader } from "@/components/app/app-header";
 import { BottomNav } from "@/components/app/main-nav";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { Illustration } from "@/components/app/brand-art";
 import { Card, CardHint } from "@/components/ui/card";
 import { Num, Xp } from "@/components/ui/num";
 import { Pill } from "@/components/ui/pill";
-import { brand } from "@/config/brand";
+import { LoginHero } from "@/components/app/login-hero";
 import { isSkillId, skillName } from "@/features/noon-integration/skills";
 import { DECK_LIMITS } from "@/features/vocabulary/deck";
 import { MASTERY_LABELS, type MasteryState } from "@/features/vocabulary/srs";
@@ -62,13 +63,9 @@ export function DemoLogin() {
     <>
       <DemoBanner />
       <main className="mx-auto flex min-h-[85vh] w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
-        <div className="text-center">
-          <p className="font-display text-5xl font-bold text-primary">{brand.productName}</p>
-          <p className="mt-2 text-lg font-semibold">{brand.productTagline}</p>
-          <p className="mt-1 text-muted">كلمات جديدة كل يوم · سلسلة تحفّزك · تدريب موجّه في نون</p>
-        </div>
+        <LoginHero />
         <Card>
-          <h1 className="text-lg font-bold">اختر طالبًا لتجربة المنتج</h1>
+          <h2 className="text-lg font-bold">اختر طالبًا لتجربة المنتج</h2>
           <p className="mt-1 text-sm text-muted">في النسخة الفعلية يدخل الطالب بحساب نون مباشرة.</p>
           <div className="mt-4 grid gap-2">
             <Button block className="h-auto justify-between py-3" onClick={() => go("demo-student")}>
@@ -98,8 +95,8 @@ export function DemoPractice() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <header>
-        <p className="text-sm font-semibold text-primary">تدريب الكلمات</p>
-        <h1 className="text-2xl font-bold">{s.dailyDone ? "أنهيت تدريب اليوم 👏" : "تدريب اليوم"}</h1>
+        <p className="text-sm font-semibold text-secondary">تدريب الكلمات</p>
+        <h1 className="text-2xl font-bold">{s.dailyDone ? "أنهيت تدريب اليوم" : "تدريب اليوم"}</h1>
         <p className="text-muted">
           {s.dailyDone
             ? "تقدر تراجع كلماتك الأضعف الآن، أو تكمل يومك بالتدرب على نون."
@@ -127,7 +124,7 @@ export function DemoPractice() {
         </form>
       )}
       <p className="text-center text-sm">
-        <Link href="/words" className="font-medium text-primary">تصفّح بنك الكلمات</Link>
+        <Link href="/words" className="font-medium text-primary-ink">تصفّح بنك الكلمات</Link>
       </p>
     </div>
   );
@@ -135,7 +132,7 @@ export function DemoPractice() {
 function DeckItem({ icon, title, hint }: { icon: React.ReactNode; title: React.ReactNode; hint: React.ReactNode }) {
   return (
     <li className="flex items-center gap-3 sm:flex-col sm:items-start">
-      <span aria-hidden className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary">{icon}</span>
+      <span aria-hidden className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary-ink">{icon}</span>
       <div>
         <p className="font-bold">{title}</p>
         <p className="text-sm text-muted">{hint}</p>
@@ -152,7 +149,7 @@ export function DemoWords({ state }: { state: string | null }) {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <header>
-        <p className="text-sm font-semibold text-primary">بنك الكلمات</p>
+        <p className="text-sm font-semibold text-secondary">بنك الكلمات</p>
         <h1 className="text-2xl font-bold">كلماتك (<Num value={rows.length} />)</h1>
       </header>
       <nav aria-label="تصفية حسب الإتقان" className="flex flex-wrap gap-2">
@@ -161,7 +158,7 @@ export function DemoWords({ state }: { state: string | null }) {
             key={s ?? "all"}
             href={s ? `/words?state=${s}` : "/words"}
             aria-current={filter === s ? "page" : undefined}
-            className={cn("rounded-full border border-border px-3 py-1 text-sm", filter === s && "border-primary bg-primary-soft text-primary")}
+            className={cn("rounded-full border border-border px-3 py-1 text-sm", filter === s && "border-primary bg-primary-soft text-primary-ink")}
           >
             {s ? MASTERY_LABELS[s] : "الكل"}
           </Link>
@@ -169,9 +166,10 @@ export function DemoWords({ state }: { state: string | null }) {
       </nav>
       {rows.length === 0 ? (
         <Card className="text-center">
+          <Illustration name="char_pose_book" className="mx-auto h-auto w-28" />
           <p className="font-semibold">لا توجد كلمات هنا بعد</p>
           <p className="text-sm text-muted">ابدأ تدريب اليوم لتضيف كلمات جديدة إلى بنكك.</p>
-          <Link href="/practice" className="mt-3 inline-block font-semibold text-primary">ابدأ التدريب</Link>
+          <Link href="/practice" className="mt-3 inline-block font-semibold text-primary-ink">ابدأ التدريب</Link>
         </Card>
       ) : (
         <Card className="p-0">
@@ -201,9 +199,7 @@ export function DemoNoon({ skill, xp }: { skill: string | null; xp: number }) {
   return (
     <div className="mx-auto grid min-h-[60vh] max-w-lg place-items-center">
       <Card className="space-y-3 text-center">
-        <span aria-hidden className="mx-auto grid size-12 place-items-center rounded-2xl bg-noon text-noon-foreground">
-          <ArrowUpLeft className="size-6" />
-        </span>
+        <Illustration name="char_pose_laptop" className="mx-auto h-auto w-32" />
         <h1 className="text-xl font-bold">هنا ينتقل الطالب إلى نون</h1>
         <p className="text-muted">
           {skillId ? <>يفتح نون مباشرة على تدريب مهارة «{skillName(skillId)}».</> : <>يفتح نون على صفحة نقاط القوة والضعف للطالب.</>}

@@ -2,7 +2,7 @@ import { CalendarClock, Trophy } from "lucide-react";
 import { Card, CardHint } from "@/components/ui/card";
 import { Num, Xp } from "@/components/ui/num";
 import { Pill } from "@/components/ui/pill";
-import { avatarEmoji } from "@/config/brand";
+import { Avatar } from "@/components/app/brand-art";
 import { analytics } from "@/features/analytics/analytics";
 import { requireUser } from "@/features/auth/dal";
 import { visibleWindow, type RankedRow } from "@/features/leaderboard/ranking";
@@ -20,7 +20,7 @@ export default async function LeaderboardPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <header>
-        <p className="text-primary text-sm font-semibold">الترتيب</p>
+        <p className="text-secondary text-sm font-semibold">الترتيب</p>
         <h1 className="text-2xl font-bold">هذا الأسبوع</h1>
         <p className="text-muted flex items-center gap-1.5 text-sm">
           <CalendarClock aria-hidden className="size-4" />
@@ -40,7 +40,7 @@ export default async function LeaderboardPage() {
         <Card className="bg-primary-soft/50 flex items-center gap-4">
           <span
             aria-hidden
-            className="bg-primary text-primary-foreground grid size-12 place-items-center rounded-2xl text-xl font-bold"
+            className="bg-primary text-primary-foreground font-num grid size-12 place-items-center rounded-2xl text-xl font-bold"
           >
             <Num value={lb.me.rank} />
           </span>
@@ -54,7 +54,7 @@ export default async function LeaderboardPage() {
                   تحتاج <Xp value={lb.xpToNext} plus /> لتتقدّم مركزًا — مهمة اليوم تكفي!
                 </>
               ) : lb.me.rank === 1 ? (
-                "أنت في الصدارة — حافظ عليها 👑"
+                "أنت في الصدارة — حافظ عليها"
               ) : (
                 "واصل التعلّم لتتقدّم"
               )}
@@ -109,21 +109,20 @@ export default async function LeaderboardPage() {
 }
 
 function Row({ r, me }: { r: RankedRow; me: boolean }) {
-  const medal = r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : null;
   return (
     <li
       className={cn("flex items-center gap-3 px-4 py-3", me && "bg-primary-soft/60")}
       aria-current={me ? "true" : undefined}
     >
-      <span className="text-muted w-7 text-center font-bold">
-        {medal ?? <Num value={r.rank} />}
-      </span>
       <span
-        aria-hidden
-        className="bg-surface-muted grid size-9 place-items-center rounded-full text-lg"
+        className={cn(
+          "font-num grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold",
+          r.rank === 1 ? "bg-primary text-primary-foreground" : r.rank <= 3 ? "bg-oak text-foreground" : "text-muted",
+        )}
       >
-        {avatarEmoji(r.avatar)}
+        <Num value={r.rank} />
       </span>
+      <Avatar avatar={r.avatar} size={36} />
       <span className={cn("flex-1 font-medium", me && "font-bold")}>
         {r.displayName} {me && <Pill tone="primary">أنت</Pill>}
       </span>

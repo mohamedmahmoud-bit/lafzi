@@ -3,6 +3,7 @@
 import { ChevronLeft, EyeOff, Lightbulb, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { Illustration } from "@/components/app/brand-art";
 import { FocusCard } from "@/components/app/focus-card";
 import { QuestionOptions } from "@/components/app/question-options";
 import { RewardPanel } from "@/components/app/reward-panel";
@@ -82,7 +83,7 @@ export function WodFlow({
     <div className="mx-auto max-w-2xl space-y-4">
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-primary flex items-center gap-1.5 text-sm font-semibold">
+          <p className="text-secondary flex items-center gap-1.5 text-sm font-semibold">
             <Sparkles aria-hidden className="size-4" /> كلمة اليوم
           </p>
           <h1 className="text-2xl font-bold">
@@ -114,10 +115,13 @@ export function WodFlow({
 
       {step === "guess" && (
         <Card className="animate-rise space-y-4">
-          <p className="text-muted text-sm">
-            اقرأ الجملة وركّز على الكلمة المظلّلة. لا بأس إن لم تعرفها — التخمين من السياق مهارة
-            أساسية في القدرات.
-          </p>
+          <div className="flex items-center gap-3">
+            <Illustration name="char_pose_think" className="-my-2 h-auto w-16 shrink-0" />
+            <p className="text-muted text-sm">
+              اقرأ الجملة وركّز على الكلمة المظلّلة. لا بأس إن لم تعرفها — التخمين من السياق مهارة
+              أساسية في القدرات.
+            </p>
+          </div>
           <blockquote className="bg-surface-muted font-display rounded-xl p-4 text-2xl leading-loose">
             <Highlighted sentence={wod.card.example} word={wod.card.word} />
           </blockquote>
@@ -153,7 +157,7 @@ export function WodFlow({
       {step === "card" && (
         <Card className="animate-rise bg-primary-soft/40 space-y-3">
           <p className="flex items-center gap-2 font-semibold">
-            <EyeOff aria-hidden className="text-primary size-5" /> اقرأ البطاقة جيدًا — سنخفيها
+            <EyeOff aria-hidden className="text-primary-ink size-5" /> اقرأ البطاقة جيدًا — سنخفيها
             ونختبر ذاكرتك.
           </p>
           <p className="text-muted text-sm">
@@ -244,7 +248,7 @@ function WordCard({ wod }: { wod: WodView }) {
     <Card className="animate-rise space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-display text-primary text-5xl leading-tight font-bold">{c.word}</p>
+          <p className="font-display text-primary-ink text-5xl leading-tight font-bold">{c.word}</p>
           <p className="mt-1 text-lg">{c.meaning}</p>
         </div>
         <div className="flex flex-col items-end gap-1">

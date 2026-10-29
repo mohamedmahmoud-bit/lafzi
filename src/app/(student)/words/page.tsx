@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import Link from "next/link";
+import { Illustration } from "@/components/app/brand-art";
 import { Card } from "@/components/ui/card";
 import { Num } from "@/components/ui/num";
 import { Pill } from "@/components/ui/pill";
@@ -39,7 +40,7 @@ export default async function WordsPage({ searchParams }: PageProps<"/words">) {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <header>
-        <p className="text-primary text-sm font-semibold">بنك الكلمات</p>
+        <p className="text-secondary text-sm font-semibold">بنك الكلمات</p>
         <h1 className="text-2xl font-bold">
           كلماتك (<Num value={rows.length} />)
         </h1>
@@ -52,7 +53,7 @@ export default async function WordsPage({ searchParams }: PageProps<"/words">) {
             aria-current={filter === s ? "page" : undefined}
             className={cn(
               "border-border rounded-full border px-3 py-1 text-sm",
-              filter === s && "border-primary bg-primary-soft text-primary",
+              filter === s && "border-primary bg-primary-soft text-primary-ink",
             )}
           >
             {s ? MASTERY_LABELS[s] : "الكل"}
@@ -61,9 +62,10 @@ export default async function WordsPage({ searchParams }: PageProps<"/words">) {
       </nav>
       {rows.length === 0 ? (
         <Card className="text-center">
+          <Illustration name="char_pose_book" className="mx-auto h-auto w-28" />
           <p className="font-semibold">لا توجد كلمات هنا بعد</p>
           <p className="text-muted text-sm">ابدأ تدريب اليوم لتضيف كلمات جديدة إلى بنكك.</p>
-          <Link href="/practice" className="text-primary mt-3 inline-block font-semibold">
+          <Link href="/practice" className="text-primary-ink mt-3 inline-block font-semibold">
             ابدأ التدريب
           </Link>
         </Card>
