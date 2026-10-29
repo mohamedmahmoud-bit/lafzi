@@ -52,7 +52,12 @@ type CoreJwt = {
   };
 };
 
-export class CitadelAuthError extends Error {}
+export class CitadelAuthError extends Error {
+  /** Short code shown on the login page, e.g. "token_401", "not_student". */
+  constructor(message: string, public code = "citadel_error") {
+    super(message);
+  }
+}
 
 export class CitadelIdentityProvider implements NoonIdentityProvider {
   readonly id = "citadel" as const;
@@ -94,8 +99,14 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
       body,
       cache: "no-store",
     });
-    if (!res.ok) throw new CitadelAuthError(`Citadel token endpoint returned ${res.status}`);
-    return res.json();
+    if (!res.ok) {
+      // Citadel's error text explains what it expected; it contains no secrets of ours.
+      const detail = (await res.text().catch(() => "")).slice(0, 300);
+      throw new CitadelAuthError(`Citadel token endpoint returned ${res.status}: ${detail}`, `token_${res.status}`);
+    }
+    return res.json().catch(() => {
+      throw new CitadelAuthError("Citadel token endpoint returned non-JSON", "token_not_json");
+    });
   }
 
   /** Accepts `{token:{accessToken,refreshToken}}` (noon2-core shape) or flat OAuth fields. */
@@ -103,7 +114,10 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
     const j = (json ?? {}) as Record<string, unknown>;
     const t = (j.token && typeof j.token === "object" ? j.token : j) as Record<string, unknown>;
     const accessToken = (t.accessToken ?? t.access_token) as string | undefined;
-    if (!accessToken) throw new CitadelAuthError("Citadel response had no access token");
+    if (!accessToken) throw new CitadelAuthError(
+        `Citadel response had no access token (keys: ${Object.keys(j).join(",")})`,
+        "no_access_token",
+      );
     const refreshToken = (t.refreshToken ?? t.refresh_token) as string | undefined;
     const exp = decodeJwt(accessToken).exp;
     return { accessToken, refreshToken, expiresAt: exp ? new Date(exp * 1000) : undefined };
@@ -115,12 +129,12 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
    */
   static profileFromToken(accessToken: string): NoonStudentProfile & { userType: string } {
     const claims = decodeJwt(accessToken) as CoreJwt;
-    if (claims.exp && claims.exp * 1000 < Date.now()) throw new CitadelAuthError("Token expired");
+    if (claims.exp && claims.exp * 1000 < Date.now()) throw new CitadelAuthError("Token expired", "token_expired");
     const profiles = (claims.attributes?.profiles ?? []).filter(
       (p) => p.id != null && !p.isDeactivated && !p.isDeleted,
     );
     const profile = profiles.find((p) => p.userType === "STUDENT") ?? profiles[0];
-    if (!profile) throw new CitadelAuthError("No active Noon profile in token");
+    if (!profile) throw new CitadelAuthError("No active Noon profile in token", "no_profile");
     const firstName = (profile.name ?? "").trim().split(/\s+/)[0];
     return {
       noonStudentId: String(profile.id),
@@ -143,7 +157,7 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
     const { userType, ...profile } = CitadelIdentityProvider.profileFromToken(tokens.accessToken);
     const isAdmin = this.cfg.adminProfileIds.includes(profile.noonStudentId);
     if (userType !== "STUDENT" && !isAdmin) {
-      throw new CitadelAuthError(`Profile type ${userType} is not allowed`);
+      throw new CitadelAuthError(`Profile type ${userType} is not allowed`, "not_student");
     }
     return {
       provider: "citadel",

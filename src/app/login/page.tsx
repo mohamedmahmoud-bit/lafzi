@@ -17,7 +17,8 @@ const ERRORS: Record<string, string> = {
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   if (await getCurrentUser()) redirect("/");
-  const { error } = await searchParams;
+  const { error, reason } = await searchParams;
+  const reasonCode = typeof reason === "string" ? reason.replace(/[^a-z0-9_]/gi, "").slice(0, 40) : null;
   const mock = isMockAuth();
   let configured = true;
   try {
@@ -34,6 +35,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       {typeof error === "string" && ERRORS[error] && (
         <p role="alert" className="bg-danger-soft text-danger rounded-xl px-4 py-3 text-sm">
           {ERRORS[error]}
+          {reasonCode && (
+            <span className="text-muted mt-1 block text-xs" dir="ltr">
+              code: {reasonCode}
+            </span>
+          )}
         </p>
       )}
 
