@@ -26,6 +26,7 @@ export function getIdentityProvider(): NoonIdentityProvider {
       appId: e.SYNAPSE_APP_ID,
       appSecret: e.SYNAPSE_APP_SECRET,
       redirectUri: e.NOON_AUTH_REDIRECT_URI,
+      userType: e.CITADEL_USER_TYPE || undefined,
       adminProfileIds: e.ADMIN_NOON_STUDENT_IDS.split(",")
         .map((s) => s.trim())
         .filter(Boolean),

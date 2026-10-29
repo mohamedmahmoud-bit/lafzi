@@ -21,6 +21,7 @@ function provider(json: unknown, status = 200, admin: string[] = []) {
     appId: "app-123",
     appSecret: "s3cret",
     redirectUri: "https://lafzi.example/api/auth/callback/noon",
+    userType: "STUDENT",
     adminProfileIds: admin,
     fetchImpl: fetchImpl as unknown as typeof fetch,
   });
@@ -41,6 +42,7 @@ describe("Citadel sign-in", () => {
       redirect_uri: "https://lafzi.example/api/auth/callback/noon",
       response_type: "code",
       state: req.state,
+      userType: "STUDENT",
     });
     expect(req.state.length).toBeGreaterThan(20);
   });

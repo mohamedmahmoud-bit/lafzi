@@ -35,6 +35,8 @@ export type CitadelConfig = {
   appId: string;
   appSecret: string;
   redirectUri: string;
+  /** Login audience sent as `userType` on the authorize URL (required when the app allows several). */
+  userType?: string;
   adminProfileIds: string[];
   fetchImpl?: typeof fetch;
 };
@@ -77,6 +79,7 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
       redirect_uri: this.cfg.redirectUri,
       response_type: "code",
       state,
+      ...(this.cfg.userType ? { userType: this.cfg.userType } : {}),
     }).toString();
     // Citadel does not use PKCE/nonce; `state` (checked in the callback) prevents login CSRF.
     return { url: url.toString(), state, nonce: "", codeVerifier: "" };

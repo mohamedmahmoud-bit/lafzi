@@ -18,6 +18,8 @@ const schema = z.object({
   SYNAPSE_APP_ID: z.string().optional(),
   SYNAPSE_APP_SECRET: z.string().optional(),
   SYNAPSE_BASE_URL: z.string().url().default("https://citadel.studyatnoon.com"),
+  // Login audience for Citadel's authorize URL; must be one of the app's allowed types. Empty = omit.
+  CITADEL_USER_TYPE: z.string().default("STUDENT"),
   NOON_AUTH_CLIENT_ID: z.string().optional(),
   NOON_AUTH_CLIENT_SECRET: z.string().optional(),
   NOON_AUTH_ISSUER: z.string().optional(),
