@@ -6,9 +6,11 @@ import { getTaxonomy } from "@/features/curriculum/service";
 import { listQuestions, questionBankStats } from "@/features/question-bank/admin.service";
 import { getQuestionBankProvider } from "@/features/question-bank/providers/factory";
 import { configuredChapters } from "@/features/question-bank/run-sync";
+import { ImportForm, PublishReadyButton } from "./import-form";
 import { SyncButton } from "./sync-button";
 
 export const metadata = { title: "بنك الأسئلة" };
+export const maxDuration = 300;
 const STATUSES = ["imported", "validating", "ready", "review_required", "published", "rejected", "archived"] as const;
 const TONE: Record<string, "success" | "xp" | "danger" | "neutral" | "primary"> = { published: "success", ready: "primary", review_required: "xp", rejected: "danger" };
 const sel = "rounded-lg border border-border bg-surface px-2 py-1.5 text-sm";
@@ -30,7 +32,8 @@ export default async function QuestionBankAdmin({ searchParams }: { searchParams
   const tiles: [string, number, string?][] = [
     ["الإجمالي", stats.total],
     ["منشورة", stats.published, "published"],
-    ["بانتظار القرار", stats.pending, "ready"],
+    ["جاهزة للنشر", stats.ready, "ready"],
+    ["تحتاج مراجعة", stats.reviewRequired, "review_required"],
     ["تحديثات بانتظار المراجعة", stats.updatedPending, "review_required"],
     ["مرفوضة", stats.rejected, "rejected"],
     ["بلا إجابة صحيحة", stats.missingAnswer],
@@ -60,6 +63,19 @@ export default async function QuestionBankAdmin({ searchParams }: { searchParams
           آخر مزامنة ناجحة: {stats.lastSync ? <bdi className="font-num">{stats.lastSync.startedAt.toISOString().slice(0, 16).replace("T", " ")} UTC</bdi> : "لم تتم بعد"}
         </p>
       </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardTitle>استيراد ملف تصدير من بنك نون</CardTitle>
+          <CardHint>ملف JSON (أو json.gz) من أسئلة نون بصيغتها الأصلية. يمر كل سؤال بنفس الفحوص — لا يُنشر شيء تلقائيًا.</CardHint>
+          <div className="mt-3"><ImportForm /></div>
+        </Card>
+        <Card>
+          <CardTitle>قرار المراجِع</CardTitle>
+          <CardHint>ينشر فقط الأسئلة التي اجتازت كل الفحوص (READY). أسئلة «للمراجعة» تبقى لقرار فردي.</CardHint>
+          <div className="mt-3"><PublishReadyButton ready={stats.ready} /></div>
+        </Card>
+      </div>
 
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {tiles.map(([label, n, status]) => (

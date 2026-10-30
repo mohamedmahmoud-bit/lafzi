@@ -5,11 +5,12 @@ import { Card, CardHint, CardTitle } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { getDb } from "@/db/client";
 import { noonQuestions, vocabularyEntries, vocabularyQuestionSources, vocabularyRelationships, vocabularyValidationRecords } from "@/db/schema";
-import { decideEntryAction, decideRelationshipAction, rerunExtractionAction } from "@/features/admin/content-actions";
+import { approveCorroboratedAction, decideEntryAction, decideRelationshipAction, rerunExtractionAction } from "@/features/admin/content-actions";
 import type { Evidence } from "@/features/word-bank/service";
 import { MeaningForm } from "./meaning-form";
 
 export const metadata = { title: "المفردات" };
+export const maxDuration = 300;
 const STATUSES = ["review_required", "candidate", "approved", "suspended", "rejected"] as const;
 const REL = { synonym: "ترادف", antonym: "تضاد" } as Record<string, string>;
 
@@ -38,7 +39,10 @@ export default async function VocabularyAdmin({ searchParams }: { searchParams: 
           <h1 className="text-2xl font-bold">المفردات المستخرجة من بنك نون</h1>
           <p className="text-muted text-sm">لا كلمة بلا سؤال نون، ولا علاقة بلا دليل صريح من نون (تصنيف المفهوم أو نص الشرح). المراجعة البشرية شرط النشر.</p>
         </div>
-        <form action={rerunExtractionAction}><Button variant="outline" size="sm">إعادة الاستخراج والتقييم</Button></form>
+        <div className="flex gap-2">
+          <form action={approveCorroboratedAction}><Button variant="success" size="sm">اعتماد المؤكَّد مرتين من نون</Button></form>
+          <form action={rerunExtractionAction}><Button variant="outline" size="sm">إعادة الاستخراج والتقييم</Button></form>
+        </div>
       </header>
       <nav className="flex flex-wrap gap-2">
         {STATUSES.map((s) => (

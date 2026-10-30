@@ -71,7 +71,12 @@ export function validateQuestion(q: NoonQuestion, ctx: ValidationContext): {
   add("topic_mapped", topicId !== null, "warning", topicId ? `Topic: ${topicId}` : "Chapter not in the canonical taxonomy");
   const subtopics = [...new Set(tags.map((t) => t.subtopicId).filter((x): x is number => x !== null))];
   const subskillId = subtopics.length === 1 ? ctx.subskillForSubtopic(subtopics[0]) : null;
-  add("subskill_mapped", subskillId !== null, "warning", subskillId ? `Subskill: ${subskillId}` : "Subtopic missing, ambiguous or unmapped");
+  if (subtopics.length === 0) {
+    // Noon tagged it at topic level only: playable, tracked at topic level (not a data problem).
+    add("subskill_mapped", false, "info", "No subtopic in Noon's tags — tracked at topic level");
+  } else {
+    add("subskill_mapped", subskillId !== null, "warning", subskillId ? `Subskill: ${subskillId}` : "Subtopic ambiguous or not in the taxonomy");
+  }
 
   // Content-shape checks per topic: don't trust the tag alone.
   if (topicId === "verbal_analogy") {

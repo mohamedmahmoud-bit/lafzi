@@ -29,6 +29,18 @@ describe("vocabulary extraction", () => {
   it("creates nothing without a Noon-stated relation (co-occurrence is not evidence)", () => {
     expect(extractCandidates(q({ additionalMaterials: [], curriculum: [{ subjectId: 249, chapterId: 2854, concept: { name: "الجزء من كل" } }] }))).toEqual([]);
   });
+  it("ignores relation words written about a distractor (only Noon's headline statement counts)", () => {
+    const c = extractCandidates(
+      q({
+        curriculum: [{ subjectId: 249, chapterId: 2854, concept: { name: "الفئة" } }],
+        additionalMaterials: [{ id: 2, type: "explanation", content: "<p>العلاقة هنا هي: انتماء إلى فئة</p><p>❌ مقبل : مدبر ↜ العلاقة تضاد</p>" }],
+      }),
+    );
+    expect(c).toEqual([]);
+  });
+  it("cleans stray markup from Noon option text without changing words", () => {
+    expect(q({ choices: [{ id: 1, text: "جزاء : عطاء<br>" }, { id: 2, text: "&nbsp;مركبة : سيارة" }] }).choices.map((x) => x.text)).toEqual(["جزاء : عطاء", "مركبة : سيارة"]);
+  });
   it("flags tag/explanation conflicts so they cannot be approved", () => {
     const c = extractCandidates(q({ additionalMaterials: [{ id: 2, type: "explanation", content: "العلاقة هنا هي: تضاد" }] }));
     expect(c[0].checks.find((x) => x.check === "no_conflict")?.passed).toBe(false);

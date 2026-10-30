@@ -19,7 +19,8 @@ export function htmlToText(html: string | null | undefined): string {
     .normalize("NFC");
 }
 
-const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim().normalize("NFC");
+/** Stems/options sometimes carry stray markup (<br>, &nbsp;) — strip it, never change the words. */
+const clean = (s: string | null | undefined) => htmlToText(s).replace(/\s+/g, " ").trim().normalize("NFC");
 
 export function normalizeDTO(dto: NoonQuestionDTO): NoonQuestion {
   const materials = dto.additionalMaterials ?? [];

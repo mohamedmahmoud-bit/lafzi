@@ -28,7 +28,8 @@ export type RelationCandidate = {
 const MOCK_LABEL = /^\(تجريبي\)\s*/;
 const PAIR = /^\s*([^:：]+?)\s*[:：]\s*([^:：]+?)\s*$/;
 const ARABIC_WORD = /^[ء-ي٠-٩ً-ْٰـ ]+$/;
-const EXPLANATION_RELATION = /العلاقة\s*(?:هنا)?\s*(?:هي)?\s*[:：]?\s*(ترادف|تضاد)/;
+/** Only Noon's headline statement about the question's relation — never a line about a distractor. */
+const EXPLANATION_RELATION = /العلاقة\s+هنا\s+هي\s*[:：]\s*(ترادف|تضاد)/;
 
 export function relationFromConcept(conceptName: string | null): RelationType | null {
   if (!conceptName) return null;

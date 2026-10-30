@@ -83,10 +83,18 @@ export async function extractFromQuestion(db: DbOrTx, questionId: string) {
 
 /** Run extraction over every published analogy question (after each sync). */
 export async function runVocabularyExtraction(db: DbOrTx) {
+  // Only questions where Noon could have stated a synonym/antonym relation (tag or explanation).
   const qs = await db
     .select({ id: noonQuestions.id })
     .from(noonQuestions)
-    .where(and(eq(noonQuestions.status, "published"), eq(noonQuestions.topicId, "verbal_analogy")));
+    .innerJoin(noonQuestionVersions, eq(noonQuestionVersions.id, noonQuestions.publishedVersionId))
+    .where(
+      and(
+        eq(noonQuestions.status, "published"),
+        eq(noonQuestions.topicId, "verbal_analogy"),
+        sql`${noonQuestionVersions.payload}::text ~ '(الترادف|التضاد|العلاقة هنا هي)'`,
+      ),
+    );
   let candidates = 0;
   for (const q of qs) candidates += (await extractFromQuestion(db, q.id)).candidates;
   const reassessed = await reassessVocabulary(db);
@@ -192,6 +200,19 @@ export type ApprovedRelation = {
   to: { id: string; lemma: string };
   evidence: Evidence[];
 };
+
+/** Reviewer bulk decision: approve relations whose every check passed AND Noon states them twice. */
+export async function approveCorroborated(db: DbOrTx, p: { reviewerId: string | null; isProduction: boolean }) {
+  const pending = await db.select({ id: vocabularyRelationships.id }).from(vocabularyRelationships).where(eq(vocabularyRelationships.status, "review_required"));
+  let approved = 0;
+  for (const r of pending) {
+    const checks = await db.select().from(vocabularyValidationRecords).where(eq(vocabularyValidationRecords.relationshipId, r.id));
+    if (!checks.length || checks.some((c) => !c.passed)) continue;
+    await decideRelationship(db, { relationshipId: r.id, decision: "approve", reviewerId: p.reviewerId, reason: "bulk: corroborated by Noon tag + explanation", isProduction: p.isProduction });
+    approved++;
+  }
+  return approved;
+}
 
 /** The approved repository — the ONLY vocabulary students ever see. */
 export async function approvedRelations(db: DbOrTx, opts: { isProduction: boolean }): Promise<ApprovedRelation[]> {
