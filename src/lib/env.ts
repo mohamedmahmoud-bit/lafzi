@@ -42,6 +42,11 @@ const schema = z.object({
   // ─── Noon practice deep links ───
   NOON_PRACTICE_ALLOWED_HOSTS: z.string().default("student.noonacademy.com,student.noon.edu.sa,student.school.studyatnoon.com"),
   ANALYTICS_SINKS: z.string().default("db"),
+  /**
+   * Students may be minors: full names are shown to classmates beyond friends only when the school /
+   * Noon has authorised it. Otherwise cohort boards show friends only (+ your own rank).
+   */
+  COHORT_LEADERBOARD_NAMES: bool,
 });
 
 export type Env = z.infer<typeof schema>;

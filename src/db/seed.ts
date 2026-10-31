@@ -12,7 +12,7 @@ import { createDb } from "./client";
 import * as s from "./schema";
 import { MOCK_CLASSMATES } from "./seed-data/words";
 import { seedDevStudyExamples, seedMockQuestionBank } from "./seed-mock-bank";
-import { seedPlatformConfig } from "./seed-platform";
+import { seedPlatformConfig, stageInitialDataset } from "./seed-platform";
 import { levelFor } from "../features/gamification/levels";
 import { addDays, learningDay, startOfLearningDay } from "../lib/time";
 import { seededRandom } from "../lib/utils";
@@ -41,6 +41,12 @@ async function main() {
     "vocabulary_entries",
     "vocabulary_word_of_day",
     "study_resources",
+    "vocab_import_batches",
+    "friend_challenges",
+    "friend_invites",
+    "friendships",
+    "user_blocks",
+    "user_reports",
     "study_collections",
     "verbal_topics",
     "analytics_events",
@@ -77,6 +83,11 @@ async function main() {
 
   // ── MOCK question bank through the real pipeline (dev only) ──────────
   const bank = await seedMockQuestionBank(db);
+  // Initial vocabulary dataset → staging → (dev reviewer) approve every row that passed all checks.
+  const staged = await stageInitialDataset(db);
+  const { acceptAllClean } = await import("../features/lexicon/service");
+  const accepted = staged ? await acceptAllClean(db, null, staged.batch.id) : 0;
+  console.log(`  vocabulary: ${staged?.batch.rowCount ?? 0} rows staged, ${accepted} clean rows approved (dev), flagged rows left for review`);
   await seedDevStudyExamples(db);
 
   // ── Cohort + users ────────────────────────────────────────────────────
@@ -105,6 +116,7 @@ async function main() {
   await db.insert(s.studentProfiles).values({
     userId: admin.id,
     displayName: "مشرف المحتوى (تجريبي)",
+    officialFullName: "مشرف المحتوى (تجريبي)",
     avatar: "owl",
     cohortId: null,
   });
@@ -208,6 +220,7 @@ async function main() {
   await db.insert(s.studentProfiles).values({
     userId: demo.id,
     displayName: "سارة (تجريبي)",
+    officialFullName: "سارة (تجريبي)",
     avatar: "gazelle",
     grade: "ثالث ثانوي",
     cohortId: cohort.id,
@@ -250,6 +263,8 @@ async function main() {
     await db.insert(s.studentProfiles).values({
       userId: u.id,
       displayName: c.name,
+      officialFullName: c.name,
+      shareScores: true,
       avatar: c.avatar,
       grade: "ثالث ثانوي",
       cohortId: cohort.id,

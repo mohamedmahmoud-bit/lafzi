@@ -6,21 +6,12 @@ A gamified daily companion for Saudi high-school students preparing for the **Ar
 > Learn a little every day → build vocabulary → keep the streak → find weak skills →
 > **go back to Noon and practise exactly those skills.**
 
-The core loop:
-
-```
-Login → مهمة اليوم → كلمة اليوم (a real Noon question) + لعبة اليوم (6 games on the Noon bank)
-      → XP + streak + level/badges + weekly topic challenge
-      → weakest subskill (local) → ذاكر مع نون → play again → «تدرب على نون» (verified links only)
-```
-
-**Content rule:** every question, answer, explanation and vocabulary word comes from the official
-Noon question bank — synced, validated and approved by a reviewer. Nothing is generated. When the
-bank has nothing published for a game, the student sees "content unavailable", not a substitute.
-
-Teaching approach: students reason before they are told — warm-up strategy prompts before a game,
-"why is the other option more precise?" after a mistake, the word of the day is met inside its
-original Noon question before its relation card is revealed.
+**Lafzi 2.0 is game-first:** OPEN → PLAY → LEARN → WIN → SHARE → RETURN TOMORROW. Five vocabulary
+games, a daily challenge, word of the day, streaks (5 answers = a streak day), friend challenges and
+friend streaks, privacy-first leaderboards, badges and a gamer profile with the official Noon name.
+Vocabulary comes from a reviewed content pipeline (the supplied 427-row dataset is staged and
+validated; only approved rows are published). Details: **[docs/LAFZI2.md](docs/LAFZI2.md)**.
+Qudurat practice on official Noon questions stays available under «تدريب قدرات».
 
 See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full architecture, database model,
 route map, Noon integration boundaries, gamification rules and the list of information needed

@@ -9,8 +9,7 @@ import {
   Target,
   Trophy,
   Zap,
-  type LucideIcon,
-} from "lucide-react";
+  type LucideIcon, Brain, Compass, Crown, Gamepad2, Music, Swords } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -23,6 +22,12 @@ const ICONS: Record<string, LucideIcon> = {
   rotate: RotateCcw,
   zap: Zap,
   book: BookOpen,
+  crown: Crown,
+  compass: Compass,
+  music: Music,
+  brain: Brain,
+  swords: Swords,
+  gamepad: Gamepad2,
 };
 
 export const BADGE_ICON_KEYS = Object.keys(ICONS);

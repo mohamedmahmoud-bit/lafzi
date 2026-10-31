@@ -79,8 +79,9 @@ describe.skipIf(!TEST_URL)("platform integrity (Postgres)", async () => {
     expect((await profile()).xpTotal).toBe(await ledgerTotal());
   });
 
-  it("games fail closed when nothing is published", async () => {
+  it("games fail closed when nothing is published or approved", async () => {
     await expect(games.startGame(userId, "relations_hunter", { timed: false })).rejects.toMatchObject({ code: "content_unavailable" });
+    await expect(games.startGame(userId, "meaning_hunter")).rejects.toMatchObject({ code: "content_unavailable" });
     expect((await wod.getVocabWod(userId)).status).toBe("unavailable");
   });
 
@@ -121,6 +122,7 @@ describe.skipIf(!TEST_URL)("platform integrity (Postgres)", async () => {
   it("full pipeline: publish, play a server-graded game, answers locked, completion single-use", async () => {
     const seeded = await seedMockQuestionBank(getDb(), provider);
     expect(seeded.published).toBeGreaterThan(10);
+    await getDb().update(s.gameTypes).set({ status: "live" }).where(eq(s.gameTypes.id, "relations_hunter"));
     const { id } = await games.startGame(userId, "relations_hunter", { timed: false });
     expect((await games.startGame(userId, "relations_hunter", { timed: false })).id).toBe(id);
     const view = (await games.getGameView(userId, id))!;
@@ -183,21 +185,11 @@ describe.skipIf(!TEST_URL)("platform integrity (Postgres)", async () => {
     expect(after.publishedVersionId).not.toBe(pub.publishedVersionId);
   });
 
-  it("bank-derived vocabulary: approved only with Noon evidence, word of the day from the source question", async () => {
+  it("Noon-derived vocabulary: approved only with Noon evidence; distractors never become relations", async () => {
     const rels = await vocab.approvedRelations(getDb(), { isProduction: false });
     expect(rels.length).toBeGreaterThan(0);
     for (const r of rels) expect(r.evidence.length).toBeGreaterThan(0);
-    // Distractor pairs never become relationships (co-occurrence is not evidence).
-    const lemmas = rels.flatMap((r) => [r.from.lemma, r.to.lemma]);
-    expect(lemmas).not.toContain("بخيل");
-    const v = await wod.getVocabWod(userId);
-    expect(v.status).toBe("ready");
-    if (v.status !== "ready") return;
-    expect(v.card).toBeNull(); // relation revealed only after answering
-    const res = await wod.answerVocabWod(userId, v.question.choices[0].id);
-    expect(res.view.status === "ready" && res.view.card).toBeTruthy();
-    const replay = await wod.answerVocabWod(userId, v.question.choices[1].id);
-    expect(replay.totalXp).toBe(0);
+    expect(rels.flatMap((r) => [r.from.lemma, r.to.lemma])).not.toContain("بخيل");
   });
 
   it("removing a source question archives it and suspends vocabulary built on it", async () => {

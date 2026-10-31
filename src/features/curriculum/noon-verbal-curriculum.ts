@@ -132,12 +132,20 @@ export const NOON_VERBAL_CURRICULUM: CurriculumSnapshotTopic[] = [
   {
     // Not a Noon chapter: vocabulary is DERIVED from bank questions (see features/vocab-bank).
     slug: "vocabulary",
-    nameAr: "المفردات والمرادفات والأضداد",
+    nameAr: "المفردات",
     noonChapterId: null,
-    sort: 8,
+    sort: 0,
+    // Lafzi vocabulary categories (not Noon curriculum nodes). One word may belong to several.
     subskills: [
-      { id: "vo_synonym", noonTopicId: null, noonSubtopicId: null, nameAr: "المرادفات" },
-      { id: "vo_antonym", noonTopicId: null, noonSubtopicId: null, nameAr: "الأضداد" },
+      { id: "vo_synonym", noonTopicId: null, noonSubtopicId: null, nameAr: "مترادفات" },
+      { id: "vo_antonym", noonTopicId: null, noonSubtopicId: null, nameAr: "أضداد" },
+      { id: "vo_animal_sound", noonTopicId: null, noonSubtopicId: null, nameAr: "أصوات الحيوانات" },
+      { id: "vo_animal_young", noonTopicId: null, noonSubtopicId: null, nameAr: "صغار الحيوانات" },
+      { id: "vo_animal_home", noonTopicId: null, noonSubtopicId: null, nameAr: "مساكن الحيوانات" },
+      { id: "vo_plural", noonTopicId: null, noonSubtopicId: null, nameAr: "جموع" },
+      { id: "vo_verb", noonTopicId: null, noonSubtopicId: null, nameAr: "أفعال" },
+      { id: "vo_qudurat", noonTopicId: null, noonSubtopicId: null, nameAr: "مفردات القدرات" },
+      { id: "vo_animal_pair", noonTopicId: null, noonSubtopicId: null, nameAr: "أزواج الحيوانات" },
     ],
   },
 ];

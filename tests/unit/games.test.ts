@@ -64,8 +64,8 @@ describe("mastery", () => {
 });
 
 describe("registry", () => {
-  it("has the six games A–F; question-bank games map to their topic natively", () => {
-    expect(GAMES.map((g) => g.letter).join("")).toBe("ABCDEF");
+  it("has the five vocabulary games on the play shelf; question-bank games map to their topic natively", () => {
+    expect(GAMES.filter((g) => g.section === "play").map((g) => g.id)).toEqual(["meaning_hunter", "match_pairs", "word_race", "odd_one_out", "memory"]);
     expect(nativeModesForTopic("verbal_analogy")).toEqual(["relations_hunter"]);
     expect(nativeModesForTopic("vocabulary")).toEqual([]);
   });

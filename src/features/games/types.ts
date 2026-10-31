@@ -1,6 +1,8 @@
 /** Server-side round snapshot (stored in game_sessions.rounds). Answer keys never leave the server unanswered. */
 export type Round = {
-  kind: "noon_question" | "relation_recall";
+  kind: "noon_question" | "relation_recall" | "meaning" | "relation" | "match" | "memory" | "odd";
+  /** Instruction shown above the stem (e.g. «ما صوت الأسد؟»). */
+  prompt?: string;
   questionId: string | null;
   versionId: string | null;
   noonQuestionId: number | null;

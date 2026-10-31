@@ -1,102 +1,90 @@
-import { Clock, Lightbulb, Play } from "lucide-react";
-import { notFound } from "next/navigation";
+import { Clock, Play } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { GameIcon } from "@/components/game/game-icon";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardHint, CardTitle } from "@/components/ui/card";
 import { requireUser } from "@/features/auth/dal";
 import { getTaxonomy } from "@/features/curriculum/service";
-import { MIN_ROUNDS, TIMED_ROUND_MS } from "@/features/games/engine";
 import { startGameAction } from "@/features/games/actions";
 import { gameById } from "@/features/games/modes";
-import { availableRounds } from "@/features/games/session.service";
-import { getDb } from "@/db/client";
-import { gameTypes } from "@/db/schema";
-import { eq } from "drizzle-orm";
-
-/** Strategy prompts: students derive the method; we never hand them the answer pattern. */
-const WARMUP: Record<string, string[]> = {
-  relations_hunter: [
-    "قبل النظر للخيارات: كوّن جملة قصيرة تربط كلمتي السؤال.",
-    "ضع كل خيار في جملتك نفسها — أيّها يحافظ على المعنى والاتجاه؟",
-    "انتبه: هل ترتيب الكلمتين في الخيار مثل ترتيبهما في السؤال؟",
-  ],
-  complete_mission: [
-    "اقرأ الجملة كاملة قبل الخيارات، وتوقّع نوع الكلمة الناقصة.",
-    "ابحث عن أداة الربط: هل تدل على توافق أم تعارض أم سبب؟",
-    "بعد اختيارك، أعد قراءة الجملة كاملة: هل يستقيم المعنى؟",
-  ],
-  word_treasure: [
-    "كل كلمة هنا ظهرت في سؤال حقيقي من بنك نون.",
-    "قبل الإجابة: هل الكلمتان تتفقان في المعنى أم تتعاكسان؟ لماذا؟",
-  ],
-};
+import { isPlayable } from "@/features/games/session.service";
+import { RELATION_TEXT, type RelationType } from "@/features/lexicon/mapping";
+import { cn } from "@/lib/utils";
 
 const ERROR_TEXT: Record<string, string> = {
-  content_unavailable: "لا توجد أسئلة منشورة كافية من بنك نون لهذه اللعبة الآن.",
-  not_live: "هذه اللعبة غير متاحة بعد.",
+  content_unavailable: "لا توجد كلمات معتمدة كافية لهذه اللعبة أو هذا القسم الآن.",
+  not_live: "هذه اللعبة غير متاحة.",
 };
+const BOARD_TYPES: RelationType[] = ["sound", "animal_young", "animal_home", "animal_female", "plural", "verb_present", "synonym", "antonym"];
+const BOARD_LABEL: Record<RelationType, string> = { sound: "الأصوات", animal_young: "الصغار", animal_home: "المساكن", animal_female: "الأزواج", plural: "الجموع", verb_present: "الأفعال", synonym: "المرادفات", antonym: "الأضداد" };
 
-export default async function GamePage({ params, searchParams }: { params: Promise<{ game: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function GamePage({ params, searchParams }: { params: Promise<{ game: string }>; searchParams: Promise<{ error?: string; category?: string }> }) {
   await requireUser();
   const { game } = await params;
-  const { error } = await searchParams;
+  const sp = await searchParams;
   const g = gameById(game);
-  if (!g) notFound();
-  const [row] = await getDb().select().from(gameTypes).where(eq(gameTypes.id, g.id)).limit(1);
-  const live = (row?.status ?? g.status) === "live";
+  if (!g || g.status !== "live") notFound();
+  if (g.id === "daily_challenge") redirect("/");
   const tax = await getTaxonomy();
-  const available = live ? await availableRounds(g.id) : 0;
-  const enough = available >= (g.source === "vocabulary" ? 2 : MIN_ROUNDS);
+  const playable = await isPlayable(g.id);
+  const category = tax.subskill(sp.category ?? "")?.id;
+  const usesCategory = g.mechanic === "mcq" || g.mechanic === "race";
+  const usesBoard = g.mechanic === "match" || g.mechanic === "memory";
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <Card>
-        <p className="text-muted text-sm">لعبة {g.letter} · {tax.topic(g.topicId)?.nameAr}</p>
-        <h1 className="text-2xl font-bold">{g.nameAr}</h1>
-        <p className="text-muted mt-2">{g.description}</p>
+    <div className="mx-auto max-w-xl space-y-4">
+      <Card className="flex items-center gap-4">
+        <GameIcon icon={g.icon} gameId={g.id} className="size-16" />
+        <div>
+          <h1 className="font-display text-3xl font-bold">{g.nameAr}</h1>
+          <p className="text-muted">{g.description}</p>
+          <p className="text-muted mt-1 flex items-center gap-1 text-xs"><Clock aria-hidden className="size-3.5" /> نحو {g.minutes} دقائق</p>
+        </div>
       </Card>
 
-      {error && ERROR_TEXT[error] && (
-        <p role="alert" className="bg-xp-soft text-xp rounded-xl px-4 py-3 text-sm">{ERROR_TEXT[error]}</p>
-      )}
+      {sp.error && ERROR_TEXT[sp.error] && <p role="alert" className="bg-sun-soft rounded-xl px-4 py-3 text-sm font-semibold">{ERROR_TEXT[sp.error]}</p>}
 
-      {!live || !enough ? (
+      {!playable ? (
         <Card className="text-center">
-          <CardTitle>{live ? "لا يوجد محتوى منشور بعد" : "قريبًا"}</CardTitle>
-          <CardHint className="mt-2">
-            {live
-              ? "هذه اللعبة تعمل فقط على أسئلة بنك نون بعد مراجعتها ونشرها. لن نعرض أسئلة مولّدة بديلة."
-              : "اللعبة قيد الإعداد."}
-          </CardHint>
-          <ButtonLink href="/play" variant="outline" className="mt-4">كل الألعاب</ButtonLink>
+          <CardTitle>بانتظار كلمات معتمدة</CardTitle>
+          <CardHint className="mt-2">تظهر الجولات بعد مراجعة الكلمات واعتمادها — لا نعرض محتوى غير معتمد.</CardHint>
+          <ButtonLink href="/play" variant="outline" className="mt-4">ألعاب أخرى</ButtonLink>
         </Card>
       ) : (
         <>
-          {WARMUP[g.id] && (
+          <form action={startGameAction}>
+            <input type="hidden" name="gameId" value={g.id} />
+            {category && <input type="hidden" name="category" value={category} />}
+            <Button size="lg" block className="h-16 text-xl"><Play aria-hidden className="size-6" /> ابدأ{category ? ` — ${tax.subskill(category)?.nameAr}` : ""}</Button>
+          </form>
+
+          {usesCategory && g.source === "lexicon" && (
             <Card>
-              <CardTitle className="flex items-center gap-2">
-                <Lightbulb aria-hidden className="text-xp size-5" /> قبل أن تبدأ
-              </CardTitle>
-              <ol className="text-muted mt-2 list-decimal space-y-1 ps-5 text-sm">
-                {WARMUP[g.id].map((w) => <li key={w}>{w}</li>)}
-              </ol>
+              <CardTitle className="text-sm">أو اختر قسمًا</CardTitle>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {tax.subskillsOf("vocabulary").map((c) => (
+                  <a key={c.id} href={`/play/${g.id}?category=${c.id}`} className={cn("rounded-full border px-3 py-1.5 text-sm", c.id === category ? "border-sky bg-sky-soft font-bold" : "border-border")}>
+                    {c.nameAr}
+                  </a>
+                ))}
+              </div>
             </Card>
           )}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <form action={startGameAction}>
-              <input type="hidden" name="gameId" value={g.id} />
-              <Button size="lg" block type="submit">
-                <Play aria-hidden className="size-5" /> جولة عادية
-              </Button>
-            </form>
-            <form action={startGameAction}>
-              <input type="hidden" name="gameId" value={g.id} />
-              <input type="hidden" name="timed" value="1" />
-              <Button size="lg" block variant="outline" type="submit">
-                <Clock aria-hidden className="size-5" /> تحدي الوقت ({Math.round(TIMED_ROUND_MS / 1000)} ث)
-              </Button>
-            </form>
-          </div>
-          <CardHint className="text-center">التلميح يحذف خيارًا خاطئًا واحدًا ويقلّل نقاط السؤال للنصف.</CardHint>
+          {usesBoard && (
+            <Card>
+              <CardTitle className="text-sm">اختر نوع الأزواج</CardTitle>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {BOARD_TYPES.map((t) => (
+                  <form key={t} action={startGameAction}>
+                    <input type="hidden" name="gameId" value={g.id} />
+                    <input type="hidden" name="relationType" value={t} />
+                    <Button variant="outline" block size="sm" title={RELATION_TEXT[t].pairHint}>{BOARD_LABEL[t]}</Button>
+                  </form>
+                ))}
+              </div>
+            </Card>
+          )}
+          {g.mechanic === "race" && <CardHint className="text-center">٧٥ ثانية. الإجابة الصحيحة تكسب نقاطًا، والسرعة المعقولة تضيف مكافأة. التخمين العشوائي لا يفيد.</CardHint>}
         </>
       )}
     </div>

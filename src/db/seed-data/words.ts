@@ -680,6 +680,13 @@ export const SEED_BADGES = [
     threshold: 100,
     sortOrder: 9,
   },
+  { code: "meaning_hunter", name: "صائد المعاني", description: "أجب 50 إجابة صحيحة في صائد المعاني", icon: "target", criteriaType: "category_correct", criteriaParam: "game:meaning_hunter", threshold: 50, sortOrder: 10 },
+  { code: "synonym_king", name: "ملك المرادفات", description: "30 إجابة صحيحة في المترادفات", icon: "crown", criteriaType: "category_correct", criteriaParam: "vo_synonym", threshold: 30, sortOrder: 11 },
+  { code: "antonym_explorer", name: "مكتشف الأضداد", description: "20 إجابة صحيحة في الأضداد", icon: "compass", criteriaType: "category_correct", criteriaParam: "vo_antonym", threshold: 20, sortOrder: 12 },
+  { code: "sound_hero", name: "بطل الأصوات", description: "25 إجابة صحيحة في أصوات الحيوانات", icon: "music", criteriaType: "category_correct", criteriaParam: "vo_animal_sound", threshold: 25, sortOrder: 13 },
+  { code: "steel_memory", name: "ذاكرة فولاذية", description: "أنهِ ذاكرة لفظي بلا أي قلبة خاطئة", icon: "brain", criteriaType: "memory_perfect", threshold: 1, sortOrder: 14 },
+  { code: "beat_friend", name: "هزمت صاحبك", description: "افُز في تحدٍّ مع صاحبك", icon: "swords", criteriaType: "challenge_won", threshold: 1, sortOrder: 15 },
+  { code: "player_10", name: "لاعب نشيط", description: "أكمل 10 جولات", icon: "gamepad", criteriaType: "games_completed", threshold: 10, sortOrder: 16 },
 ] as const;
 
 /** ⚠️ DEVELOPMENT DATA — fictional classmates for the cohort leaderboard. */

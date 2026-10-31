@@ -215,7 +215,7 @@ function SkillMap({ local }: { local: ProgressData["local"] }) {
             <li key={s.subskillId}>
               <div className="flex justify-between gap-2 text-sm">
                 <span className="font-semibold">{s.nameAr}</span>
-                <span className="text-muted text-xs">{s.topicName} · <Num value={s.correct} />/<Num value={s.attempts} /></span>
+                <span className="text-muted text-xs">{s.topicName} · <Num value={s.correct} /> من <Num value={s.attempts} /></span>
               </div>
               <Progress value={Math.round(s.mastery * 100)} max={100} label={`إتقان ${s.nameAr}`} className="mt-1 h-2" />
             </li>

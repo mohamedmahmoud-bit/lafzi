@@ -12,6 +12,10 @@ export const XP_ACTIONS = [
   "noon_practice_clicked",
   "streak_milestone",
   "game_completed",
+  "daily_challenge",
+  "word_mastered",
+  "challenge_completed",
+  "challenge_won",
 ] as const;
 
 export type XpAction = (typeof XP_ACTIONS)[number];
@@ -85,9 +89,13 @@ export const DEFAULT_XP_RULES: Record<XpAction, XpRule> = {
     action: "game_completed",
     xp: 12,
     dailyCap: 60,
-    description: "إنهاء لعبة على أسئلة نون — تتضاعف حتى ×1.5 حسب الدقة",
+    description: "إنهاء جولة — تتضاعف حتى ×1.5 حسب الدقة",
     enabled: true,
   },
+  daily_challenge: { action: "daily_challenge", xp: 30, dailyCap: 30, description: "إنهاء تحدي اليوم (مرة يوميًا)", enabled: true },
+  word_mastered: { action: "word_mastered", xp: 5, dailyCap: 50, description: "إتقان كلمة جديدة", enabled: true },
+  challenge_completed: { action: "challenge_completed", xp: 10, dailyCap: 30, description: "إكمال تحدٍّ مع صاحب", enabled: true },
+  challenge_won: { action: "challenge_won", xp: 15, dailyCap: 30, description: "الفوز في تحدٍّ مع صاحب", enabled: true },
 };
 
 export function isXpAction(v: string): v is XpAction {

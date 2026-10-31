@@ -10,7 +10,7 @@ import {
   vocabularyValidationRecords,
 } from "@/db/schema";
 import type { NoonQuestion } from "@/features/question-bank/types";
-import { canApproveRelationship, extractCandidates, isCorroborated, meaningSupported } from "./extraction";
+import { canApproveRelationship, extractCandidates, isCorroborated, meaningSupported, NOON_EVIDENCE, OTHER_EVIDENCE } from "./extraction";
 
 export type Evidence = { questionId: string; noonQuestionId: number; versionId: string; kind: string; excerpt: string; role: string };
 
@@ -111,7 +111,8 @@ export async function reassessVocabulary(db: DbOrTx) {
     .from(noonQuestions)
     .where(eq(noonQuestions.status, "published"));
   const liveVersion = new Map(live.map((l) => [l.id, l.versionId]));
-  const valid = (e: Evidence) => liveVersion.get(e.questionId) === e.versionId;
+  // Dataset / reference / admin evidence is not tied to the question bank and stays valid.
+  const valid = (e: Evidence) => OTHER_EVIDENCE.has(e.kind) || (NOON_EVIDENCE.has(e.kind) && liveVersion.get(e.questionId) === e.versionId);
 
   let suspended = 0;
   const rels = await db.select().from(vocabularyRelationships).where(inArray(vocabularyRelationships.status, ["approved", "review_required"]));
@@ -128,7 +129,12 @@ export async function reassessVocabulary(db: DbOrTx) {
   const entries = await db.select({ id: vocabularyEntries.id, meaningEvidence: vocabularyEntries.meaningEvidence, meaningStatus: vocabularyEntries.meaningStatus }).from(vocabularyEntries).where(eq(vocabularyEntries.status, "approved"));
   for (const e of entries) {
     const srcs = await db.select().from(vocabularyQuestionSources).where(eq(vocabularyQuestionSources.entryId, e.id));
-    const ok = srcs.some((s) => liveVersion.has(s.questionId));
+    // Entries supported by approved senses or non-bank relations don't depend on Noon questions.
+    const [{ other }] = await db.execute<{ other: number }>(sql`
+      select ((select count(*) from word_senses s where s.entry_id = ${e.id} and s.status = 'approved')
+            + (select count(*) from vocabulary_relationships r where (r.from_entry_id = ${e.id} or r.to_entry_id = ${e.id})
+                 and r.status = 'approved' and r.evidence::text ~ '"kind": ?"(dataset_row|reference|admin)"'))::int as other`).then((r) => r.rows);
+    const ok = other > 0 || srcs.length === 0 || srcs.some((s) => liveVersion.has(s.questionId));
     if (!ok) {
       await db.update(vocabularyEntries).set({ status: "suspended" }).where(eq(vocabularyEntries.id, e.id));
       await db.insert(vocabularyReviewDecisions).values({ entryId: e.id, decision: "suspend", reason: "No published Noon source question", reviewerId: null });

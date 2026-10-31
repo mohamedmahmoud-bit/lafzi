@@ -15,6 +15,13 @@
       "when": 1793277425077,
       "tag": "0001_question_bank_games_study",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793460109710,
+      "tag": "0002_lafzi2_vocab_social",
+      "breakpoints": true
     }
   ]
 }

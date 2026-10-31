@@ -1,36 +1,35 @@
-import { BookOpen, CheckCircle2, ChevronLeft, Circle, Clock, Crosshair, Flame, Sparkles, Trophy } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Circle, Flame, Play, Sparkles, Swords, Trophy, UserPlus, Zap } from "lucide-react";
 import Link from "next/link";
+import { Avatar } from "@/components/app/brand-art";
 import { BadgeIcon } from "@/components/app/badge-icon";
-import { NoonCta } from "@/components/app/noon-cta";
-import { ButtonLink } from "@/components/ui/button";
-import { Card, CardHint } from "@/components/ui/card";
+import { GameIcon } from "@/components/game/game-icon";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { Card, CardHint, CardTitle } from "@/components/ui/card";
 import { Num, Xp } from "@/components/ui/num";
-import { Pill } from "@/components/ui/pill";
 import { Progress } from "@/components/ui/progress";
 import { analytics } from "@/features/analytics/analytics";
 import { requireUser } from "@/features/auth/dal";
 import { getDashboard, type DashboardData } from "@/features/dashboard/service";
+import { startGameAction } from "@/features/games/actions";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "الرئيسية" };
 
-export default async function DashboardPage() {
+export default async function HomePage() {
   const user = await requireUser();
   const d = await getDashboard(user);
   void analytics.track("dashboard_viewed", { missionDone: d.mission.completed }, { userId: user.id });
-
   return (
-    <div className="grid gap-4 lg:grid-cols-3 lg:gap-5">
-      <div className="grid content-start gap-4 lg:col-span-2">
-        <MissionHero d={d} />
-        <FocusPanel d={d} />
-        <GamesGrid d={d} />
+    <div className="mx-auto grid max-w-5xl min-w-0 gap-4 lg:grid-cols-3">
+      <div className="grid min-w-0 content-start gap-4 lg:col-span-2">
+        <StreakHero d={d} />
+        <TodayChallenge d={d} />
+        <QuickPlay d={d} />
+        <Categories d={d} />
       </div>
-      <aside className="grid content-start gap-4">
-        <LevelCard d={d} />
-        <WeeklyRankCard d={d} />
-        <ChallengeCard d={d} />
-        <WordTeaser d={d} />
+      <aside className="grid min-w-0 content-start gap-4">
+        <FriendsCard d={d} />
+        <WeeklyBoard d={d} />
         {d.badge && (
           <Card className="flex items-center gap-3">
             <BadgeIcon icon={d.badge.icon} />
@@ -41,285 +40,197 @@ export default async function DashboardPage() {
             </div>
           </Card>
         )}
+        <Collection d={d} />
       </aside>
     </div>
   );
 }
 
-function streakHeadline(d: DashboardData) {
+function StreakHero({ d }: { d: DashboardData }) {
   const { count, status } = d.streak;
-  if (status === "done_today") return `${count} أيام متتالية — أنجزت يومك`;
-  if (status === "at_risk") return `استمر في سلسلتك — اليوم ${ordinal(count + 1)}`;
-  if (status === "broken") return "ابدأ سلسلة جديدة اليوم";
-  return "ابدأ أول يوم في سلسلتك";
-}
-
-const ORDINALS = [
-  "الأول",
-  "الثاني",
-  "الثالث",
-  "الرابع",
-  "الخامس",
-  "السادس",
-  "السابع",
-  "الثامن",
-  "التاسع",
-  "العاشر",
-];
-function ordinal(n: number) {
-  return ORDINALS[n - 1] ?? `رقم ${n}`;
-}
-
-function MissionHero({ d }: { d: DashboardData }) {
-  const next = d.mission.tasks.find((t) => !t.done);
-  const nextHref = next?.id === "word_of_day" ? "/word-of-the-day" : d.recommended ? `/play/${d.recommended.id}` : "/play";
-  const done = d.mission.completed;
+  const left = Math.max(0, d.interactions.needed - d.interactions.done);
+  const line =
+    status === "done_today" ? "يومك محسوب — كمّل واجمع نقاط أكثر" : left > 0 && d.interactions.done > 0 ? `باقي ${left} إجابات وتحسب يومك` : status === "at_risk" ? "سلسلتك تنتظرك اليوم" : status === "broken" ? "ابدأ سلسلة جديدة اليوم — كل بداية تُحسب" : "أجب ٥ إجابات اليوم وابدأ سلسلتك";
   return (
-    <Card className={cn("overflow-hidden p-0", done && "border-success/30")}>
-      <div
-        className={cn(
-          "px-5 pt-5 pb-4",
-          done ? "bg-success-soft" : "bg-surface-muted",
-        )}
-      >
-        <p className="text-streak flex items-center gap-1.5 text-sm font-semibold">
-          <Flame aria-hidden className="size-4" />
-          {streakHeadline(d)}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold">
-          {done ? "أحسنت! أنجزت مهمة اليوم" : "مهمة اليوم"}
-        </h1>
-        {!done ? (
-          <p className="text-muted mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            <span className="flex items-center gap-1">
-              <Clock aria-hidden className="size-4" /> <Num value={d.mission.minutes.min} />–
-              <Num value={d.mission.minutes.max} /> دقائق
-            </span>
-            <span className="text-xp font-semibold">
-              حتى <Xp value={d.mission.missionXp} plus />
-            </span>
-          </p>
-        ) : (
-          <p className="text-muted mt-1 text-sm">
-            ربحت اليوم{" "}
-            <strong className="text-xp">
-              <Xp value={d.xpToday} plus />
-            </strong>
-            . الخطوة الأهم الآن: درّب مهارتك الأضعف في نون.
-          </p>
-        )}
+    <Card className="bg-flame-soft border-flame/20 flex items-center gap-4">
+      <span className="relative grid size-20 shrink-0 place-items-center">
+        <Flame aria-hidden className={cn("text-flame size-20", status !== "broken" && count > 0 && "animate-flame")} fill="currentColor" fillOpacity={0.15} />
+        <span className="font-num absolute pt-4 text-2xl font-black">{count}</span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-2xl font-bold">{count > 0 ? <>سلسلتك <Num value={count} /> {count === 1 ? "يوم" : "أيام"}</> : "مستعد تبدأ؟"}</p>
+        <p className="text-sm">{line}</p>
+        <Progress value={Math.min(d.interactions.done, d.interactions.needed)} max={d.interactions.needed} label="إجابات اليوم" className="mt-2 h-2" barClassName="bg-flame" />
+        <p className="text-muted mt-1 text-xs">أفضل سلسلة: <Num value={d.longestStreak} /> · اليوم: <Xp value={d.xpToday} plus /></p>
       </div>
-      <ol className="divide-border divide-y px-5">
-        {d.mission.tasks.map((t, i) => (
-          <li key={t.id} className="flex items-center gap-3 py-3">
-            {t.done ? (
-              <CheckCircle2 aria-hidden className="text-success size-6 shrink-0" />
-            ) : (
-              <Circle aria-hidden className="text-border size-6 shrink-0" />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className={cn("font-semibold", t.done && "text-muted line-through decoration-1")}>
-                <span className="sr-only">{t.done ? "مكتملة: " : `الخطوة ${i + 1}: `}</span>
-                {t.title}
-              </p>
-              <p className="text-muted text-sm">{t.detail}</p>
-            </div>
+    </Card>
+  );
+}
+
+function TodayChallenge({ d }: { d: DashboardData }) {
+  const tasks = d.mission.tasks;
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-xl font-bold">{d.mission.completed ? "أنجزت مهمة اليوم!" : "مستعد لتحدي اليوم؟"}</h2>
+        <span className="text-muted text-xs"><Num value={d.mission.doneCount} /> من <Num value={tasks.length} /></span>
+      </div>
+      <ol className="space-y-2">
+        {tasks.map((t) => (
+          <li key={t.id} className="flex items-center gap-2 text-sm">
+            {t.done ? <CheckCircle2 aria-hidden className="text-mint size-5" /> : <Circle aria-hidden className="text-border size-5" />}
+            <span className={cn("font-semibold", t.done && "text-muted line-through")}>{t.title}</span>
+            <span className="text-muted">— {t.detail}</span>
           </li>
         ))}
       </ol>
-      <div className="px-5 pt-1 pb-5">
-        {done ? (
-          <ButtonLink href="/play" size="lg" variant="outline" block>
-            جولة إضافية
-          </ButtonLink>
-        ) : (
-          <ButtonLink href={nextHref} size="lg" block>
-            {d.mission.doneCount === 0 ? "ابدأ المهمة" : `أكمل: ${next?.title}`}
-            <ChevronLeft aria-hidden className="size-5" />
+      <div className="grid gap-2 sm:grid-cols-2">
+        {!d.wod.done && d.wod.word && (
+          <ButtonLink href="/word-of-the-day" variant="outline" size="lg" block>
+            <Sparkles aria-hidden className="text-sun size-5" /> كلمة اليوم: <span className="font-display">{d.wod.word}</span>
           </ButtonLink>
         )}
-      </div>
-    </Card>
-  );
-}
-
-function WordTeaser({ d }: { d: DashboardData }) {
-  if (!d.wod.word) {
-    return (
-      <Card className="flex items-center gap-3">
-        <span aria-hidden className="bg-surface-muted text-muted grid size-11 place-items-center rounded-xl">
-          <Sparkles className="size-5" />
-        </span>
-        <div>
-          <p className="text-muted text-sm">كلمة اليوم</p>
-          <p className="text-sm">لا توجد كلمة معتمدة من بنك نون اليوم.</p>
-        </div>
-      </Card>
-    );
-  }
-  return (
-    <Link href="/word-of-the-day" className="group rounded-brand block focus-visible:outline-offset-4">
-      <Card className="group-hover:border-primary/40 flex items-center gap-4 transition">
-        <span aria-hidden className="bg-primary-soft text-primary-ink grid size-11 place-items-center rounded-xl">
-          <Sparkles className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-muted text-sm">كلمة اليوم · من بنك نون</p>
-          <p className="font-display text-3xl leading-tight font-bold">{d.wod.word}</p>
-        </div>
-        <span className="text-primary-ink text-sm font-semibold">{d.wod.completed ? "راجعها" : "ابدأ"}</span>
-      </Card>
-    </Link>
-  );
-}
-
-/** "محتاج تركز على إيه؟" — local weak skill + the one Noon action on the screen. */
-function FocusPanel({ d }: { d: DashboardData }) {
-  return (
-    <Card className="space-y-3">
-      <div className="flex items-start gap-3">
-        <span aria-hidden className="bg-primary-soft text-primary-ink grid size-10 shrink-0 place-items-center rounded-xl">
-          <Crosshair className="size-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-bold">محتاج تركز على إيه؟</h2>
-          {d.weak ? (
-            <>
-              <p className="mt-0.5">
-                <strong className="text-danger">{d.weak.nameAr}</strong>
-                <span className="text-muted"> · {d.weak.topicName}</span>
-              </p>
-              <Progress value={Math.round(d.weak.mastery * 100)} max={100} label="إتقانك لهذه المهارة" className="mt-2 h-2" />
-              <p className="text-muted mt-1 text-xs">من إجاباتك في ألعاب لفظي (<Num value={d.weak.correct} /> من <Num value={d.weak.attempts} />) — وليست خريطة نون الرسمية.</p>
-            </>
+        {d.daily.playable && !d.daily.done && (
+          d.daily.open ? (
+            <ButtonLink href={`/play/session/${d.daily.open}`} size="lg" block className="bg-flame text-white"><Play aria-hidden className="size-5" /> أكمل التحدي</ButtonLink>
           ) : (
-            <p className="text-muted mt-0.5 text-sm">العب بضع جولات لنعرف أين تحتاج التركيز. خريطة مهاراتك الرسمية موجودة في نون.</p>
-          )}
-        </div>
+            <form action={startGameAction}>
+              <input type="hidden" name="gameId" value="daily_challenge" />
+              <Button size="lg" block className="bg-flame text-white"><Play aria-hidden className="size-5" /> ٣ دقائق تفصلك عن <Num value={d.daily.xp} /> نقطة</Button>
+            </form>
+          )
+        )}
+        {!d.daily.playable && <CardHint>تحدي اليوم يظهر بعد اعتماد أول دفعة من الكلمات.</CardHint>}
       </div>
-      {d.study.length > 0 && (
-        <Link href={`/study/${d.study[0].id}`} className="hover:bg-surface-muted flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm">
-          <BookOpen aria-hidden className="text-primary-ink size-4" />
-          <span className="flex-1">ذاكر: {d.study[0].title}</span>
-          {d.study[0].isDevExample && <Pill tone="dev">مثال للتطوير</Pill>}
-        </Link>
-      )}
-      <NoonCta href={d.noonHref} size="lg" label={d.weak ? "تدرّب على هذه المهارة في نون" : "تدرب على نون"} />
     </Card>
   );
 }
 
-function GamesGrid({ d }: { d: DashboardData }) {
+function QuickPlay({ d }: { d: DashboardData }) {
+  const first = d.games.find((g) => g.playable);
   return (
-    <section aria-labelledby="games-h" className="space-y-2">
+    <section aria-labelledby="qp" className="min-w-0 space-y-2">
       <div className="flex items-center justify-between">
-        <h2 id="games-h" className="font-bold">الأقسام الستة</h2>
-        <Link href="/play" className="text-primary-ink text-sm font-medium">كل الألعاب</Link>
+        <h2 id="qp" className="font-bold">العب</h2>
+        <Link href="/play" className="text-primary-ink text-sm font-semibold">كل الألعاب</Link>
       </div>
-      <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        {d.games.map((g) => {
-          const inner = (
-            <Card className={cn("h-full p-4", g.playable ? "hover:border-primary/40 transition" : "opacity-75")}>
-              <div className="flex items-center justify-between">
-                <span aria-hidden className="font-num text-primary-ink text-lg font-bold">{g.letter}</span>
-                {g.id === d.recommended?.id && <Pill tone="primary">مقترحة</Pill>}
-                {!g.live && <Pill>قريبًا</Pill>}
-                {g.live && !g.playable && <Pill tone="xp">بلا محتوى</Pill>}
-              </div>
-              <p className="mt-1 font-bold">{g.nameAr}</p>
-              <p className="text-muted text-xs">{g.topicName}</p>
-              {g.mastery !== null && <Progress value={Math.round(g.mastery * 100)} max={100} label={`إتقان ${g.topicName}`} className="mt-2 h-1.5" />}
-            </Card>
-          );
-          return <li key={g.id}>{g.live ? <Link href={`/play/${g.id}`} className="rounded-brand block h-full">{inner}</Link> : inner}</li>;
-        })}
+      {first && (
+        <form action={startGameAction}>
+          <input type="hidden" name="gameId" value={first.id} />
+          <Button size="lg" block className="bg-sky h-14 text-lg text-white"><Zap aria-hidden className="size-5" /> لعب سريع — {first.nameAr}</Button>
+        </form>
+      )}
+      <ul className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {d.games.map((g) => (
+          <li key={g.id} className="w-36 shrink-0">
+            <Link href={`/play/${g.id}`} className={cn("bg-surface border-border block h-full rounded-2xl border p-3 transition active:scale-[0.98]", !g.playable && "opacity-60")}>
+              <GameIcon icon={g.icon} gameId={g.id} />
+              <p className="mt-2 font-bold">{g.nameAr}</p>
+              <p className="text-muted line-clamp-2 text-xs">{g.tagline}</p>
+            </Link>
+          </li>
+        ))}
       </ul>
     </section>
   );
 }
 
-function ChallengeCard({ d }: { d: DashboardData }) {
-  const c = d.challenge;
-  if (!c) return null;
+const CAT_TONES = ["bg-sky-soft", "bg-mint-soft", "bg-sun-soft", "bg-grape-soft", "bg-rose-soft", "bg-flame-soft"];
+function Categories({ d }: { d: DashboardData }) {
+  if (!d.categories.length) return null;
   return (
-    <Card>
-      <p className="text-muted text-xs">تحدي الأسبوع</p>
-      <p className="font-bold">{c.gameName} · {c.topicName}</p>
-      {c.rows.length ? (
-        <ol className="mt-2 space-y-1 text-sm">
-          {c.rows.slice(0, 3).map((r) => (
-            <li key={r.userId} className={cn("flex justify-between", r.userId === c.me?.userId && "text-primary-ink font-bold")}>
-              <span><Num value={r.rank} />. {r.displayName}</span>
-              <span className="font-num"><Num value={r.score} /></span>
+    <section aria-labelledby="cats" className="space-y-2">
+      <h2 id="cats" className="font-bold">استكشف الأقسام</h2>
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {d.categories.map((c, i) => (
+          <li key={c.id}>
+            <Link href={`/play/meaning_hunter?category=${c.id}`} className={cn("block rounded-2xl p-3 transition active:scale-[0.98]", CAT_TONES[i % CAT_TONES.length])}>
+              <p className="font-bold">{c.nameAr}</p>
+              <p className="text-muted text-xs"><Num value={c.words} /> كلمة</p>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function FriendsCard({ d }: { d: DashboardData }) {
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-center justify-between">
+        <CardTitle>أصحابك</CardTitle>
+        <Link href="/friends" className="text-primary-ink text-sm font-semibold">الكل</Link>
+      </div>
+      {d.friends.length ? (
+        <ul className="flex flex-wrap gap-3">
+          {d.friends.map((f) => (
+            <li key={f.userId} className="w-14 text-center">
+              <Avatar avatar={f.avatar} size={48} className="mx-auto" />
+              <p className="truncate text-xs">{f.name.split(" ")[0]}</p>
+              {f.friendStreak > 0 && <p className="text-flame text-[0.7rem] font-bold"><Flame aria-hidden className="inline size-3" /> <Num value={f.friendStreak} /></p>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <CardHint>العب مع أصحابك: أرسل لهم رابط دعوة أو تحدٍّ.</CardHint>
+      )}
+      {d.challenges.length > 0 && (
+        <ul className="space-y-1">
+          {d.challenges.map((c) => (
+            <li key={c.id}>
+              <Link href={`/c/${c.code}`} className="hover:bg-surface-muted flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm">
+                <Swords aria-hidden className="text-grape size-4" />
+                <span className="flex-1">{c.gameName}</span>
+                <span className="text-muted text-xs">{c.bothDone ? "النتيجة جاهزة" : c.players.length < 2 ? "بانتظار صاحبك" : "قيد اللعب"}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ButtonLink href="/friends" variant="outline" size="sm" block><UserPlus aria-hidden className="size-4" /> تحدَّ صاحبك</ButtonLink>
+    </Card>
+  );
+}
+
+function WeeklyBoard({ d }: { d: DashboardData }) {
+  return (
+    <Link href="/leaderboard" className="rounded-brand block">
+      <Card className="hover:border-primary/40 space-y-2 transition">
+        <div className="flex items-center gap-2">
+          <Trophy aria-hidden className="text-sun size-5" />
+          <CardTitle className="flex-1">ترتيب الأسبوع</CardTitle>
+          {d.myRank && <span className="font-num text-sm font-bold">#{d.myRank}</span>}
+        </div>
+        <ol className="space-y-1.5">
+          {d.board.map((r) => (
+            <li key={r.userId} className={cn("flex items-center gap-2 text-sm", r.isMe && "text-primary-ink font-bold")}>
+              <span className="font-num w-5 text-center">{r.rank}</span>
+              <Avatar avatar={r.avatar} size={28} />
+              <span className="flex-1 truncate">{r.isMe ? "أنت" : r.displayName}</span>
+              <Xp value={r.xp} />
             </li>
           ))}
         </ol>
-      ) : (
-        <p className="text-muted mt-1 text-sm">لا أحد في الترتيب بعد — كن الأول.</p>
-      )}
-      {c.me && c.me.rank > 3 && <p className="text-muted mt-1 text-xs">ترتيبك <Num value={c.me.rank} /> · <Num value={c.me.score} /> نقطة</p>}
-      {d.recommended && <ButtonLink href={`/play/${d.recommended.id}`} size="sm" variant="outline" className="mt-3" block>العب في التحدي</ButtonLink>}
-    </Card>
+        {d.board.length <= 1 && <CardHint>أضف أصحابك لتتنافسوا كل أسبوع.</CardHint>}
+      </Card>
+    </Link>
   );
 }
 
-function LevelCard({ d }: { d: DashboardData }) {
-  const l = d.level;
+function Collection({ d }: { d: DashboardData }) {
+  const c = d.collection;
   return (
-    <Card>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-muted text-xs">
-            المستوى <Num value={l.current.level} />
-          </p>
-          <p className="text-lg font-bold">{l.current.name}</p>
+    <Link href="/words" className="rounded-brand block">
+      <Card className="hover:border-primary/40 transition">
+        <div className="flex items-center justify-between">
+          <CardTitle>مجموعة كلماتك</CardTitle>
+          <ChevronLeft aria-hidden className="text-muted size-4" />
         </div>
-        <p className="font-num text-primary-ink text-2xl font-bold">
-          <Xp value={d.profile.xpTotal} />
-        </p>
-      </div>
-      <Progress
-        value={l.xpIntoLevel}
-        max={l.next ? l.next.minXp - l.current.minXp : 1}
-        label="التقدم نحو المستوى التالي"
-        className="mt-3"
-        barClassName="bg-primary"
-      />
-      <CardHint className="mt-2">
-        {l.next ? (
-          <>
-            باقي <Xp value={l.xpForNext ?? 0} /> لتصبح «{l.next.name}»
-          </>
-        ) : (
-          "وصلت لأعلى مستوى — سيد الكلمات!"
-        )}
-      </CardHint>
-    </Card>
-  );
-}
-
-function WeeklyRankCard({ d }: { d: DashboardData }) {
-  const lb = d.leaderboard;
-  return (
-    <Link href="/leaderboard" className="rounded-brand block">
-      <Card className="hover:border-primary/40 flex items-center gap-3 transition">
-        <span aria-hidden className="bg-xp-soft text-xp grid size-11 place-items-center rounded-xl">
-          <Trophy className="size-5" />
-        </span>
-        <div className="flex-1">
-          <p className="text-muted text-xs">ترتيبك هذا الأسبوع</p>
-          {lb.rank ? (
-            <p className="font-bold">
-              <Num value={lb.rank} /> من <Num value={lb.size} /> · <Xp value={lb.weekXp} />
-            </p>
-          ) : (
-            <p className="font-bold">انضم إلى الترتيب بإكمال مهمتك</p>
-          )}
-          {lb.xpToNext ? (
-            <p className="text-muted text-xs">
-              <Xp value={lb.xpToNext} plus /> وتتقدّم مركزًا
-            </p>
-          ) : null}
+        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+          <div className="bg-mint-soft rounded-xl py-2"><p className="font-num text-xl font-bold"><Num value={c.mastered} /></p><p className="text-muted text-[0.7rem]">متقنة</p></div>
+          <div className="bg-sun-soft rounded-xl py-2"><p className="font-num text-xl font-bold"><Num value={c.learning} /></p><p className="text-muted text-[0.7rem]">قيد التعلم</p></div>
+          <div className="bg-surface-muted rounded-xl py-2"><p className="font-num text-xl font-bold"><Num value={c.total} /></p><p className="text-muted text-[0.7rem]">في لفظي</p></div>
         </div>
       </Card>
     </Link>

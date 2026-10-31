@@ -1,13 +1,12 @@
-import { BarChart3, BookOpenText, Gamepad2, Home, Medal, Sparkles, Trophy } from "lucide-react";
+import { Gamepad2, Home, Sparkles, Trophy, UserRound, Users } from "lucide-react";
 
 export const NAV_ITEMS = [
   { href: "/", label: "الرئيسية", icon: Home, mobile: true },
-  { href: "/word-of-the-day", label: "كلمة اليوم", icon: Sparkles, mobile: true },
   { href: "/play", label: "العب", icon: Gamepad2, mobile: true },
-  { href: "/study", label: "ذاكر مع نون", short: "ذاكر", icon: BookOpenText, mobile: true },
-  { href: "/progress", label: "تقدمي", icon: BarChart3, mobile: false },
-  { href: "/achievements", label: "الإنجازات", icon: Medal, mobile: false },
+  { href: "/word-of-the-day", label: "كلمة اليوم", icon: Sparkles, mobile: false },
+  { href: "/friends", label: "الأصدقاء", icon: Users, mobile: true },
   { href: "/leaderboard", label: "الترتيب", icon: Trophy, mobile: true },
+  { href: "/profile", label: "ملفي", icon: UserRound, mobile: true },
 ] as const;
 
 export function isActive(pathname: string, href: string) {

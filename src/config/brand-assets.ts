@@ -2,7 +2,10 @@
  * Paths to the official noon brand assets (from the "Ink & Light" brand pack, copied into
  * public/brand). The demo build swaps this module for inlined copies.
  */
-export const AVATAR_KEYS = ["gazelle", "owl", "fox", "falcon", "lion", "camel", "dolphin", "horse", "butterfly", "turtle"] as const;
+export const AVATAR_KEYS = [
+  "gazelle", "owl", "fox", "falcon", "lion", "camel", "dolphin", "horse", "butterfly", "turtle",
+  "shemagh", "hijab_teal", "hijab_clay", "cap", "headphones", "astronaut", "scholar", "hijab_sand",
+] as const;
 
 export type IllustrationName =
   | "char_pose_think"

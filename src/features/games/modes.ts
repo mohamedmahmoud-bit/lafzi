@@ -1,97 +1,47 @@
 /**
- * Game registry. Every game plays official Noon questions in their NATIVE form (same stem, same
- * options, same answer). A game that would change the task needs an approved "transform"
- * compatibility row — none are enabled yet, by design.
+ * Game registry. Vocabulary games ("lexicon") play only approved Lafzi vocabulary.
+ * The Qudurat practice games ("question_bank") play published Noon questions in their native form.
  */
 export type GameDef = {
   id: string;
-  letter: "A" | "B" | "C" | "D" | "E" | "F";
   nameAr: string;
   topicId: string;
   tagline: string;
   description: string;
-  /** Default availability; admins can flip game_types.status. */
-  status: "live" | "coming_soon";
-  /** Source of rounds. */
-  source: "question_bank" | "vocabulary";
+  status: "live" | "coming_soon" | "retired";
+  source: "lexicon" | "question_bank" | "daily";
+  /** play = main game shelf; qudurat = secondary practice section. */
+  section: "play" | "qudurat" | "hidden";
+  /** UI mechanic. */
+  mechanic: "mcq" | "match" | "memory" | "race" | "odd";
+  icon: string;
+  minutes: number;
   sort: number;
 };
 
 export const GAMES: GameDef[] = [
-  {
-    id: "relations_hunter",
-    letter: "A",
-    nameAr: "صائد العلاقات",
-    topicId: "verbal_analogy",
-    tagline: "اكتشف العلاقة قبل أن تنظر في الخيارات",
-    description: "أسئلة التناظر اللفظي من بنك نون. حدّد العلاقة في الزوج الأول بنفسك، ثم ابحث عن الزوج الذي يحملها بالترتيب نفسه.",
-    status: "live",
-    source: "question_bank",
-    sort: 1,
-  },
-  {
-    id: "complete_mission",
-    letter: "B",
-    nameAr: "أكمل المهمة",
-    topicId: "sentence_completion",
-    tagline: "اقرأ السياق، توقّع الكلمة، ثم تحقّق",
-    description: "أسئلة إكمال الجمل من بنك نون. ابحث عن أداة الربط أو القرينة التي تحسم المعنى قبل الاختيار.",
-    status: "live",
-    source: "question_bank",
-    sort: 2,
-  },
-  {
-    id: "language_detective",
-    letter: "C",
-    nameAr: "المحقق اللغوي",
-    topicId: "contextual_error",
-    tagline: "ابحث عن الكلمة التي تكسر المعنى",
-    description: "أسئلة الخطأ السياقي من بنك نون.",
-    status: "coming_soon",
-    source: "question_bank",
-    sort: 3,
-  },
-  {
-    id: "reader_adventure",
-    letter: "D",
-    nameAr: "مغامرة القارئ",
-    topicId: "reading_comprehension",
-    tagline: "نص من نون وأسئلته",
-    description: "أسئلة استيعاب المقروء مع نصوصها الأصلية من بنك نون.",
-    status: "coming_soon",
-    source: "question_bank",
-    sort: 4,
-  },
-  {
-    id: "word_treasure",
-    letter: "E",
-    nameAr: "كنز الكلمات",
-    topicId: "vocabulary",
-    tagline: "كلمات من أسئلة نون نفسها",
-    description: "كلمات مستخرجة من أسئلة بنك نون ومراجَعة بشريًا، مع السؤال الأصلي الذي ظهرت فيه.",
-    status: "live",
-    source: "vocabulary",
-    sort: 5,
-  },
-  {
-    id: "odd_one_out",
-    letter: "F",
-    nameAr: "اكتشف الدخيل",
-    topicId: "odd_one_out",
-    tagline: "أي كلمة لا تنتمي؟",
-    description: "أسئلة الاختلاف من بنك نون.",
-    status: "coming_soon",
-    source: "question_bank",
-    sort: 6,
-  },
+  { id: "meaning_hunter", nameAr: "صائد المعاني", topicId: "vocabulary", tagline: "اصطد المعنى الصحيح قبل غيرك", description: "كلمة واحدة وأربعة معانٍ — اختر المعنى الصحيح بسرعة وثقة.", status: "live", source: "lexicon", section: "play", mechanic: "mcq", icon: "target", minutes: 2, sort: 1 },
+  { id: "match_pairs", nameAr: "وصلها صح", topicId: "vocabulary", tagline: "صِل كل كلمة بقرينتها", description: "أصوات، صغار، مساكن، جموع، مرادفات وأضداد — صِل الأزواج كلها.", status: "live", source: "lexicon", section: "play", mechanic: "match", icon: "link", minutes: 2, sort: 2 },
+  { id: "word_race", nameAr: "سباق الكلمات", topicId: "vocabulary", tagline: "٧٥ ثانية… كم كلمة تلحق؟", description: "سباق ضد الوقت: الدقة أولًا، والسرعة تضيف نقاطًا.", status: "live", source: "lexicon", section: "play", mechanic: "race", icon: "timer", minutes: 2, sort: 3 },
+  { id: "odd_one_out", nameAr: "الكلمة الدخيلة", topicId: "vocabulary", tagline: "واحدة منها ليست من المجموعة", description: "ثلاث كلمات يجمعها شيء واحد… اكتشف الدخيلة.", status: "live", source: "lexicon", section: "play", mechanic: "odd", icon: "search", minutes: 2, sort: 4 },
+  { id: "memory", nameAr: "ذاكرة لفظي", topicId: "vocabulary", tagline: "اقلب البطاقات وطابق الأزواج", description: "بطاقات مقلوبة: طابق كل كلمة بقرينتها بأقل عدد من المحاولات.", status: "live", source: "lexicon", section: "play", mechanic: "memory", icon: "brain", minutes: 3, sort: 5 },
+  { id: "daily_challenge", nameAr: "تحدي اليوم", topicId: "vocabulary", tagline: "١٠ أسئلة، ٣ دقائق، نفس الأسئلة لكل الطلاب", description: "تحدٍّ يومي واحد يحسب لسلسلتك ومهمتك.", status: "live", source: "daily", section: "hidden", mechanic: "mcq", icon: "flame", minutes: 3, sort: 0 },
+  // Qudurat practice on official Noon questions (secondary).
+  { id: "relations_hunter", nameAr: "تناظر لفظي", topicId: "verbal_analogy", tagline: "أسئلة التناظر من بنك نون", description: "أسئلة التناظر اللفظي من بنك نون كما هي.", status: "live", source: "question_bank", section: "qudurat", mechanic: "mcq", icon: "scale", minutes: 4, sort: 10 },
+  { id: "complete_mission", nameAr: "إكمال الجمل", topicId: "sentence_completion", tagline: "أسئلة إكمال الجمل من بنك نون", description: "أسئلة إكمال الجمل من بنك نون كما هي.", status: "live", source: "question_bank", section: "qudurat", mechanic: "mcq", icon: "pen", minutes: 4, sort: 11 },
+  { id: "word_treasure", nameAr: "كنز الكلمات", topicId: "vocabulary", tagline: "", description: "استُبدلت بألعاب المفردات الجديدة.", status: "retired", source: "lexicon", section: "hidden", mechanic: "mcq", icon: "gem", minutes: 2, sort: 99 },
 ];
 
 export const gameById = (id: string) => GAMES.find((g) => g.id === id) ?? null;
+export const PLAY_GAMES = GAMES.filter((g) => g.section === "play");
+export const QUDURAT_GAMES = GAMES.filter((g) => g.section === "qudurat");
+/** Games a friend can be challenged in (fixed, equivalent round sets). */
+export const CHALLENGE_GAMES = ["meaning_hunter", "word_race", "match_pairs", "odd_one_out"];
 
 /** Games that can play a topic's MCQs natively (question_game_compatibility.game_mode). */
 export function nativeModesForTopic(topicId: string): string[] {
   return GAMES.filter((g) => g.source === "question_bank" && g.topicId === topicId).map((g) => g.id);
 }
 
-/** Topics with a game in the registry (used by validation's game_compatible info check). */
+/** Topics with a question-bank game (validation's game_compatible info check). */
 export const PLAYABLE_TOPICS = new Set(GAMES.filter((g) => g.source === "question_bank").map((g) => g.topicId));

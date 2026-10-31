@@ -9,12 +9,18 @@ export type BadgeCriteriaType =
   | "words_mastered"
   | "comeback"
   | "synonyms_mastered"
-  | "sessions_completed";
+  | "sessions_completed"
+  | "category_correct"
+  | "memory_perfect"
+  | "challenge_won"
+  | "games_completed";
 
 export type BadgeDefinition = {
   id: string;
   code: string;
   criteriaType: BadgeCriteriaType;
+  /** category_correct: a vocabulary category id, or "game:<gameId>". */
+  criteriaParam?: string | null;
   threshold: number;
   enabled: boolean;
 };
@@ -30,6 +36,11 @@ export type BadgeStats = {
   sessionsCompleted: number;
   /** Largest gap (days) before the most recent qualifying day; 0 if not applicable. */
   comebackGapDays: number;
+  /** Correct game answers keyed by category id and by "game:<gameId>". */
+  correctBy?: Record<string, number>;
+  memoryPerfect?: number;
+  challengesWon?: number;
+  gamesCompleted?: number;
 };
 
 /** Returns [current, target] so the UI can show "37 / 50". */
@@ -50,6 +61,14 @@ export function badgeProgress(def: BadgeDefinition, s: BadgeStats): [number, num
       return [Math.min(s.sessionsCompleted, t), t];
     case "comeback":
       return [s.comebackGapDays >= t ? 1 : 0, 1];
+    case "category_correct":
+      return [Math.min(s.correctBy?.[def.criteriaParam ?? ""] ?? 0, t), t];
+    case "memory_perfect":
+      return [Math.min(s.memoryPerfect ?? 0, t), t];
+    case "challenge_won":
+      return [Math.min(s.challengesWon ?? 0, t), t];
+    case "games_completed":
+      return [Math.min(s.gamesCompleted ?? 0, t), t];
   }
 }
 

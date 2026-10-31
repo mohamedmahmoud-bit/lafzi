@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { cohorts, studentProfiles, users } from "@/db/schema";
 import { sanitizeText } from "@/lib/utils";
@@ -18,6 +18,8 @@ export async function upsertUserFromIdentity(identity: NoonIdentity): Promise<st
       )
       .limit(1);
 
+    // Trusted identity sync: the only writer allowed to change the official name (DB trigger).
+    await tx.execute(sql`set local lafzi.identity_sync = 'on'`);
     if (existing) {
       await tx
         .update(users)
@@ -29,7 +31,7 @@ export async function upsertUserFromIdentity(identity: NoonIdentity): Promise<st
         .where(eq(users.id, existing.id));
       await tx
         .update(studentProfiles)
-        .set({ displayName, grade: identity.profile.grade ?? null })
+        .set({ displayName, officialFullName: displayName, identitySyncedAt: new Date(), grade: identity.profile.grade ?? null })
         .where(eq(studentProfiles.userId, existing.id));
       return existing.id;
     }
@@ -54,6 +56,8 @@ export async function upsertUserFromIdentity(identity: NoonIdentity): Promise<st
     await tx.insert(studentProfiles).values({
       userId: user.id,
       displayName,
+      officialFullName: displayName,
+      identitySyncedAt: new Date(),
       grade: identity.profile.grade ?? null,
       cohortId: cohort?.id ?? null,
     });

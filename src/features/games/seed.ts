@@ -8,6 +8,6 @@ export async function seedGameTypes(db: DbOrTx) {
     await db
       .insert(gameTypes)
       .values({ id: g.id, nameAr: g.nameAr, topicId: g.topicId, description: g.description, status: g.status, sort: g.sort })
-      .onConflictDoUpdate({ target: gameTypes.id, set: { nameAr: g.nameAr, topicId: g.topicId, description: g.description, sort: g.sort } });
+      .onConflictDoUpdate({ target: gameTypes.id, set: { nameAr: g.nameAr, topicId: g.topicId, description: g.description, status: g.status, sort: g.sort } });
   }
 }

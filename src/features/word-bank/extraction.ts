@@ -7,7 +7,7 @@
  *   • explanation   — Noon's explanation says «العلاقة هنا هي: ترادف/تضاد»
  * Co-occurrence alone (two words in the same question) never creates a relationship.
  */
-import { normalizeArabic } from "@/lib/utils";
+import { lexKey } from "@/features/lexicon/normalize";
 import type { NoonQuestion } from "@/features/question-bank/types";
 
 export type RelationType = "synonym" | "antonym";
@@ -48,7 +48,7 @@ function parsePair(s: string) {
   const m = s.replace(MOCK_LABEL, "").match(PAIR);
   if (!m) return null;
   const words = [m[1].trim(), m[2].trim()];
-  return words.map((w) => ({ lemma: w, normalized: normalizeArabic(w) }));
+  return words.map((w) => ({ lemma: w, normalized: lexKey(w) }));
 }
 
 function wordChecks(w: { lemma: string; normalized: string }) {
@@ -110,8 +110,13 @@ export const isCorroborated = (c: Pick<RelationCandidate, "evidence">) =>
 
 /** A relationship may be approved only with at least one Noon-stated evidence item. */
 export function canApproveRelationship(evidence: { kind: string }[]): boolean {
-  return evidence.some((e) => e.kind === "concept_tag" || e.kind === "explanation_statement");
+  return evidence.some((e) => NOON_EVIDENCE.has(e.kind) || OTHER_EVIDENCE.has(e.kind));
 }
+
+/** Evidence that depends on a live Noon question version. */
+export const NOON_EVIDENCE = new Set(["concept_tag", "explanation_statement", "explanation_quote"]);
+/** Human-reviewed sources that do not depend on the question bank (dataset row, reference, admin). */
+export const OTHER_EVIDENCE = new Set(["dataset_row", "reference", "admin"]);
 
 /** A meaning may be approved only if it is quoted verbatim from a source question's Noon explanation. */
 const fold = (s: string) =>

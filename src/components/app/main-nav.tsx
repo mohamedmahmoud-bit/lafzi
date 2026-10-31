@@ -51,7 +51,7 @@ export function BottomNav() {
                 )}
               >
                 <Icon aria-hidden className="size-5" strokeWidth={active ? 2.4 : 1.8} />
-                {"short" in item ? item.short : item.label}
+                {item.label}
               </Link>
             </li>
           );

@@ -1,25 +1,22 @@
 "use client";
 
-import { ChevronLeft, PenLine } from "lucide-react";
+import { ChevronLeft, PenLine, Repeat } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { ChoiceList, NoonExplanation } from "@/components/app/choice-list";
+import { ChoiceList } from "@/components/app/choice-list";
 import { RewardPanel } from "@/components/app/reward-panel";
+import { Confetti } from "@/components/game/feedback";
 import { ButtonLink } from "@/components/ui/button";
-import { Card, CardHint, CardTitle } from "@/components/ui/card";
+import { Card, CardHint } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import type { RewardSummary } from "@/features/gamification/rewards";
 import { answerVocabWodAction, viewVocabWodAction } from "@/features/word-bank/actions";
 import type { VocabWodView } from "@/features/word-bank/wod.service";
 
 type Ready = Extract<VocabWodView, { status: "ready" }>;
-const REL = { synonym: "ترادف", antonym: "تضاد" } as const;
 
-/**
- * Active-learning flow: (1) meet the word inside its ORIGINAL Noon question and answer it,
- * (2) explain the relation to yourself, (3) only then see the approved relation card.
- */
-export function VocabWodFlow({ initial }: { initial: Ready }) {
+/** Discover → guess the meaning → reveal the card → use the word. Then it enters spaced review. */
+export function VocabWodFlow({ initial, categoryNames }: { initial: Ready; categoryNames: Record<string, string> }) {
   const [view, setView] = useState<Ready>(initial);
   const [selected, setSelected] = useState<string | null>(null);
   const [reward, setReward] = useState<RewardSummary | null>(null);
@@ -46,76 +43,52 @@ export function VocabWodFlow({ initial }: { initial: Ready }) {
 
   const a = view.answered;
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <header className="text-center">
+    <div className="mx-auto max-w-xl space-y-4">
+      <Card className="relative overflow-hidden text-center">
+        {a?.isCorrect && <Confetti />}
         <Pill tone="primary">كلمة اليوم</Pill>
-        <p className="font-display mt-2 text-5xl font-bold">{view.word}</p>
-        <p className="text-muted mt-1 text-sm">ظهرت هذه الكلمة في سؤال من بنك نون. حلّه أولًا.</p>
-      </header>
+        <p className="font-display mt-3 text-6xl font-bold">{view.word}</p>
+        <div className="mt-2 flex flex-wrap justify-center gap-1">
+          {view.categories.map((c) => <Pill key={c}>{categoryNames[c] ?? c}</Pill>)}
+        </div>
+      </Card>
 
-      {error && <p role="alert" className="bg-danger-soft text-danger rounded-xl px-4 py-3 text-sm">{error}</p>}
+      {error && <p role="alert" className="bg-rose-soft text-rose rounded-xl px-4 py-3 text-sm">{error}</p>}
 
       <Card className="space-y-4">
-        <p className="text-muted text-sm">قبل النظر للخيارات: ما العلاقة بين كلمتي السؤال؟ قلها لنفسك بجملة.</p>
-        <p className="font-display text-center text-2xl leading-loose">{view.question.stem}</p>
-        <ChoiceList
-          name={view.question.stem}
-          choices={view.question.choices}
-          selected={a?.choiceId ?? selected}
-          correctId={a?.correctId ?? null}
-          disabled={pending}
-          onSelect={onSelect}
-        />
-        {a && (
-          <div className="animate-rise space-y-3">
-            <p className={`font-bold ${a.isCorrect ? "text-success" : "text-xp"}`}>
-              {a.isCorrect ? "صحيح!" : "ليست هذه — قارن بين جملتك وبين الإجابة المظللة."}
-            </p>
-            <NoonExplanation text={a.explanation} noonQuestionId={view.question.noonQuestionId} />
-          </div>
-        )}
+        <p className="text-center font-bold">{a ? (a.isCorrect ? "صح! هذا معناها" : "ليست هذه — المعنى الصحيح مظلل") : "خمّن: ما معنى الكلمة؟"}</p>
+        <ChoiceList name="معنى الكلمة" choices={view.choices} selected={a?.choiceId ?? selected} correctId={a?.correctId ?? null} disabled={pending} onSelect={onSelect} cols={1} />
       </Card>
 
       {reward && <RewardPanel reward={reward} />}
 
       {view.card && (
         <Card className="animate-rise space-y-3">
-          <CardTitle>بطاقة «{view.word}»</CardTitle>
-          <ul className="space-y-2">
-            {view.card.relations.map((r) => (
-              <li key={`${r.type}-${r.other}`} className="bg-surface-muted flex flex-wrap items-center gap-2 rounded-xl px-3 py-2">
-                <Pill tone={r.type === "synonym" ? "success" : "xp"}>{REL[r.type]}</Pill>
-                <span className="font-display text-lg font-bold">{r.other}</span>
-                <span className="text-muted ms-auto text-xs">
-                  المصدر: سؤال نون <bdi className="font-num">{r.noonQuestionIds.join("، ")}</bdi>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="text-sm">
-            <p className="text-muted text-xs font-semibold">المعنى</p>
-            {view.card.meaning ? (
-              <p>
-                {view.card.meaning}
-                {view.card.meaningSource && <span className="text-muted text-xs"> — من شرح نون للسؤال <bdi className="font-num">{view.card.meaningSource}</bdi></span>}
-              </p>
-            ) : (
-              <p className="text-muted">لا يوجد تعريف معتمد لهذه الكلمة.</p>
-            )}
-          </div>
+          {view.card.meanings.map((m, i) => (
+            <div key={i}>
+              <p className="font-semibold">{m.text}</p>
+              {m.example && <p className="text-muted text-sm">«{m.example}»</p>}
+            </div>
+          ))}
+          {view.card.relations.length > 0 && (
+            <ul className="flex flex-wrap gap-2">
+              {view.card.relations.map((r, i) => (
+                <li key={i} className="bg-surface-muted rounded-full px-3 py-1 text-sm">
+                  <span className="text-muted">{r.direction === "to" ? r.label : `${r.label} لـ`}: </span>
+                  <span className="font-display font-bold">{r.other}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="border-border flex items-start gap-2 rounded-xl border border-dashed px-3 py-2 text-sm">
             <PenLine aria-hidden className="text-primary-ink mt-0.5 size-4 shrink-0" />
-            <p>اكتب في دفترك جملة من إنشائك تستخدم فيها «{view.word}»، ثم جملة أخرى بكلمتها المقابلة.</p>
+            <p>تحدٍّ صغير: قل جملة من عندك فيها «{view.word}» — الآن، بصوت مسموع.</p>
           </div>
-          <CardHint>ستعود الكلمة في «كنز الكلمات» للمراجعة المتباعدة.</CardHint>
+          <CardHint className="flex items-center gap-1"><Repeat aria-hidden className="size-4" /> حالتها: {view.card.mastery}. ستعود لك للمراجعة في الوقت المناسب.</CardHint>
         </Card>
       )}
 
-      {a && (
-        <ButtonLink href="/play/word_treasure" size="lg" block>
-          تابع إلى كنز الكلمات <ChevronLeft aria-hidden className="size-5" />
-        </ButtonLink>
-      )}
+      {a && <ButtonLink href="/" size="lg" block>تابع مهمة اليوم <ChevronLeft aria-hidden className="size-5" /></ButtonLink>}
     </div>
   );
 }

@@ -54,6 +54,29 @@ export async function getBadgeStats(db: DbOrTx, userId: string): Promise<BadgeSt
     .select({ games: count() })
     .from(gameSessions)
     .where(and(eq(gameSessions.userId, userId), eq(gameSessions.status, "completed")));
+  const byCategory = await db
+    .select({ k: gameSessionAnswers.subskillId, n: sql<number>`count(*)::int` })
+    .from(gameSessionAnswers)
+    .innerJoin(gameSessions, eq(gameSessions.id, gameSessionAnswers.sessionId))
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessionAnswers.isCorrect, true)))
+    .groupBy(gameSessionAnswers.subskillId);
+  const byGame = await db
+    .select({ k: gameSessions.gameTypeId, n: sql<number>`count(*)::int` })
+    .from(gameSessionAnswers)
+    .innerJoin(gameSessions, eq(gameSessions.id, gameSessionAnswers.sessionId))
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessionAnswers.isCorrect, true)))
+    .groupBy(gameSessions.gameTypeId);
+  const correctBy: Record<string, number> = {};
+  for (const r of byCategory) if (r.k) correctBy[r.k] = r.n;
+  for (const r of byGame) correctBy[`game:${r.k}`] = r.n;
+  const [{ memoryPerfect }] = await db
+    .select({ memoryPerfect: sql<number>`count(*)::int` })
+    .from(gameSessions)
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessions.gameTypeId, "memory"), eq(gameSessions.status, "completed"), eq(gameSessions.mistakes, 0)));
+  const [{ challengesWon }] = await db.execute<{ challengesWon: number }>(sql`
+    select count(*)::int as "challengesWon" from challenge_participants me
+    join challenge_participants other on other.challenge_id = me.challenge_id and other.user_id <> me.user_id
+    where me.user_id = ${userId} and me.completed_at is not null and other.completed_at is not null and me.score > other.score`).then((r) => r.rows);
 
   return {
     qualifiedDays,
@@ -63,6 +86,10 @@ export async function getBadgeStats(db: DbOrTx, userId: string): Promise<BadgeSt
     wordsMastered: words?.mastered ?? 0,
     synonymCorrect,
     sessionsCompleted: sessions + games,
+    correctBy,
+    memoryPerfect,
+    challengesWon,
+    gamesCompleted: games,
     comebackGapDays: lastTwo.length === 2 ? daysBetween(lastTwo[1].day, lastTwo[0].day) : 0,
   };
 }

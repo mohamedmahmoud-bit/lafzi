@@ -31,6 +31,19 @@
   --state-success-soft: #e9ede8;
   --state-danger: #9c4a26; /* wrong / needs practice: deep terracotta, always with an icon or label */
   --state-danger-soft: #fae8ce;
+  /* Lafzi Play — game accents (configurable; pair with ink text for contrast). */
+  --play-flame: #e8590c;
+  --play-flame-soft: #ffe8d6;
+  --play-sun: #f2a516;
+  --play-sun-soft: #fff3d1;
+  --play-mint: #11875d;
+  --play-mint-soft: #dcf5ea;
+  --play-sky: #1f6fd1;
+  --play-sky-soft: #e0edff;
+  --play-grape: #7048c8;
+  --play-grape-soft: #ece4ff;
+  --play-rose: #c9365a;
+  --play-rose-soft: #ffe1e8;
   --noon-cta: #3a2318; /* espresso block */
   --noon-cta-foreground: #ffffff;
   color-scheme: light;
@@ -59,6 +72,18 @@
   --color-success-soft: var(--state-success-soft);
   --color-danger: var(--state-danger);
   --color-danger-soft: var(--state-danger-soft);
+  --color-flame: var(--play-flame);
+  --color-flame-soft: var(--play-flame-soft);
+  --color-sun: var(--play-sun);
+  --color-sun-soft: var(--play-sun-soft);
+  --color-mint: var(--play-mint);
+  --color-mint-soft: var(--play-mint-soft);
+  --color-sky: var(--play-sky);
+  --color-sky-soft: var(--play-sky-soft);
+  --color-grape: var(--play-grape);
+  --color-grape-soft: var(--play-grape-soft);
+  --color-rose: var(--play-rose);
+  --color-rose-soft: var(--play-rose-soft);
   --color-noon: var(--noon-cta);
   --color-noon-foreground: var(--noon-cta-foreground);
   --radius-brand: var(--brand-radius);
@@ -128,3 +153,41 @@ body {
 .animate-rise {
   animation: rise 320ms ease-out both;
 }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+.animate-shake {
+  animation: shake 360ms ease-in-out both;
+}
+
+@keyframes flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.08) rotate(-4deg); }
+}
+.animate-flame {
+  animation: flicker 1.6s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+@keyframes burst {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; }
+}
+.confetti-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: burst 900ms ease-out forwards;
+}
+
+/* Memory cards: 3D flip; reduced-motion users get an instant swap (global rule above). */
+.flip-card { perspective: 800px; }
+.flip-inner { transition: transform 280ms ease; transform-style: preserve-3d; position: relative; height: 100%; }
+.flip-card[data-open="true"] .flip-inner { transform: rotateY(180deg); }
+.flip-face { position: absolute; inset: 0; backface-visibility: hidden; }
+.flip-back { transform: rotateY(180deg); }

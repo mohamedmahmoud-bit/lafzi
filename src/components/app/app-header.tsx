@@ -50,7 +50,6 @@ export function AppHeader({
             label="تدرب على نون"
             className="hidden md:inline-flex"
           />
-          <NoonCta href={practiceHref("header_mobile")} size="sm" label="نون" className="md:hidden" />
           {user.role === "admin" && (
             <Link
               href="/admin"
@@ -59,7 +58,9 @@ export function AppHeader({
               الإدارة
             </Link>
           )}
-          <Avatar avatar={user.avatar} size={36} />
+          <Link href="/profile" aria-label="ملفي" className="rounded-full">
+            <Avatar avatar={user.avatar} size={36} />
+          </Link>
           <form action="/api/auth/logout" method="post">
             <button
               type="submit"

@@ -93,8 +93,16 @@ export const studentProfiles = pgTable(
     userId: uuid("user_id")
       .primaryKey()
       .references(() => users.id, { onDelete: "cascade" }),
+    /** Mirrors officialFullName (kept for existing queries). Never student-editable. */
     displayName: text("display_name").notNull(),
+    /** Exactly as provided by Noon identity. Changed only by identity sync (DB trigger enforces). */
+    officialFullName: text("official_full_name"),
+    identitySyncedAt: timestamp("identity_synced_at", { withTimezone: true }),
     avatar: text("avatar").notNull().default("owl"),
+    /** Opt-in: appear on leaderboards beyond friends. */
+    shareScores: boolean("share_scores").notNull().default(false),
+    /** Who can open the profile: friends | private. */
+    profileVisibility: text("profile_visibility").notNull().default("friends"),
     grade: text("grade"),
     country: text("country").default("SA"),
     cohortId: uuid("cohort_id").references(() => cohorts.id, { onDelete: "set null" }),
@@ -295,6 +303,9 @@ export const studentDailyActivity = pgTable(
     wordOfDayCompleted: boolean("word_of_day_completed").notNull().default(false),
     sessionsCompleted: integer("sessions_completed").notNull().default(0),
     gamesCompleted: integer("games_completed").notNull().default(0),
+    dailyChallengeCompleted: boolean("daily_challenge_completed").notNull().default(false),
+    /** Valid word interactions today (answers); a streak day needs ≥ 5. */
+    wordInteractions: integer("word_interactions").notNull().default(0),
     missionCompletedAt: timestamp("mission_completed_at", { withTimezone: true }),
     xpEarned: integer("xp_earned").notNull().default(0),
     freezeUsed: boolean("freeze_used").notNull().default(false),
@@ -351,6 +362,10 @@ export const badgeCriteria = pgEnum("badge_criteria", [
   "comeback",
   "synonyms_mastered",
   "sessions_completed",
+  "category_correct",
+  "memory_perfect",
+  "challenge_won",
+  "games_completed",
 ]);
 
 export const badges = pgTable("badges", {
@@ -360,6 +375,8 @@ export const badges = pgTable("badges", {
   description: text("description").notNull(),
   icon: text("icon").notNull(),
   criteriaType: badgeCriteria("criteria_type").notNull(),
+  /** Extra parameter for the criteria (e.g. a vocabulary category id). */
+  criteriaParam: text("criteria_param"),
   threshold: integer("threshold").notNull().default(1),
   enabled: boolean("enabled").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -719,6 +736,15 @@ export const gameSessions = pgTable(
       .notNull()
       .references(() => gameTypes.id),
     timed: boolean("timed").notNull().default(false),
+    /** normal | daily | challenge */
+    kind: text("kind").notNull().default("normal"),
+    challengeId: uuid("challenge_id"),
+    /** Vocabulary category the round set was drawn from (category leaderboards). */
+    categoryId: text("category_id"),
+    /** Whole-session deadline for timed races (server-enforced). */
+    deadlineAt: timestamp("deadline_at", { withTimezone: true }),
+    /** Memory game: wrong flips. */
+    mistakes: integer("mistakes").notNull().default(0),
     status: text("status").notNull().default("in_progress"), // in_progress | completed | abandoned
     day: day().notNull(),
     /** Server-only round snapshots incl. answer keys and the exact question version. */
@@ -793,8 +819,9 @@ export const competitions = pgTable(
   "competitions",
   {
     id: id(),
-    kind: text("kind").notNull(), // weekly_overall | weekly_topic
+    kind: text("kind").notNull(), // weekly_overall | weekly_topic | weekly_category
     topicId: text("topic_id").references(() => verbalTopics.id),
+    categoryId: text("category_id"),
     startsOn: day("starts_on").notNull(),
     endsOn: day("ends_on").notNull(),
     title: text("title").notNull(),
@@ -930,6 +957,9 @@ export const vocabularyEntries = pgTable(
     meaningStatus: text("meaning_status").notNull().default("none"), // none | proposed | approved
     meaningEvidence: jsonb("meaning_evidence").$type<Record<string, unknown>[]>().notNull().default([]),
     isMock: boolean("is_mock").notNull().default(false),
+    difficulty: smallint("difficulty").notNull().default(2),
+    /** Set when merged into another entry (duplicates). */
+    mergedInto: uuid("merged_into"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -963,7 +993,9 @@ export const vocabularyRelationships = pgTable(
     toEntryId: uuid("to_entry_id")
       .notNull()
       .references(() => vocabularyEntries.id, { onDelete: "cascade" }),
-    type: text("type").notNull(), // synonym | antonym
+    /** synonym | antonym | animal_sound | animal_young | animal_home | plural | verb_present | animal_female — directional from → to */
+    type: text("type").notNull(),
+    example: text("example"),
     status: vocabStatus("status").notNull().default("candidate"),
     /** [{ questionId, noonQuestionId, versionId, kind, excerpt }] — required for publishing. */
     evidence: jsonb("evidence").$type<Record<string, unknown>[]>().notNull().default([]),
@@ -1148,4 +1180,181 @@ export const studentResourceProgress = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.resourceId] })],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Lafzi 2.0 — vocabulary content system (staging → review → published)
+// ════════════════════════════════════════════════════════════════════════════
+
+export const vocabImportBatches = pgTable("vocab_import_batches", {
+  id: id(),
+  sourceName: text("source_name").notNull(),
+  /** dataset | csv | markdown | noon_extraction | admin */
+  sourceKind: text("source_kind").notNull(),
+  fileHash: text("file_hash").notNull().unique(),
+  rowCount: integer("row_count").notNull(),
+  stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+});
+
+export const importRowStatus = pgEnum("import_row_status", ["staged", "flagged", "accepted", "rejected", "merged"]);
+
+/** Every source row exactly as supplied; never overwritten. Corrections live in `edited`. */
+export const vocabImportRows = pgTable(
+  "vocab_import_rows",
+  {
+    id: id(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => vocabImportBatches.id, { onDelete: "cascade" }),
+    rowNumber: integer("row_number").notNull(),
+    section: text("section").notNull(),
+    raw: jsonb("raw").$type<Record<string, string>>().notNull(),
+    word: text("word").notNull(),
+    meaning: text("meaning"),
+    relationLabel: text("relation_label"),
+    related: text("related"),
+    example: text("example"),
+    categoryId: text("category_id"),
+    relationType: text("relation_type"),
+    /** Reviewer corrections (original fields stay untouched). */
+    edited: jsonb("edited").$type<Record<string, string | null>>(),
+    status: importRowStatus("status").notNull().default("staged"),
+    flags: jsonb("flags").$type<{ code: string; severity: "error" | "warning"; message: string }[]>().notNull().default([]),
+    entryId: uuid("entry_id"),
+    relatedEntryId: uuid("related_entry_id"),
+    senseId: uuid("sense_id"),
+    relationshipId: uuid("relationship_id"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("vocab_import_rows_uq").on(t.batchId, t.rowNumber), index().on(t.status), index().on(t.categoryId)],
+);
+
+export const wordSenses = pgTable(
+  "word_senses",
+  {
+    id: id(),
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => vocabularyEntries.id, { onDelete: "cascade" }),
+    meaning: text("meaning").notNull(),
+    example: text("example"),
+    status: vocabStatus("status").notNull().default("review_required"),
+    difficulty: smallint("difficulty").notNull().default(2),
+    /** [{kind: dataset_row|noon_question|reference|admin, label, batchId?, rowNumber?, noonQuestionId?}] */
+    sources: jsonb("sources").$type<Record<string, unknown>[]>().notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index().on(t.entryId), index().on(t.status)],
+);
+
+export const entryCategories = pgTable(
+  "entry_categories",
+  {
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => vocabularyEntries.id, { onDelete: "cascade" }),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => verbalSubskills.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.entryId, t.categoryId] }), index().on(t.categoryId)],
+);
+
+// ─── Social ────────────────────────────────────────────────────────────────
+
+/** One row per pair, (userLow < userHigh). */
+export const friendships = pgTable(
+  "friendships",
+  {
+    userLow: uuid("user_low")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    userHigh: uuid("user_high")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("accepted"), // accepted | removed
+    via: text("via").notNull().default("invite"), // invite | challenge
+    streak: integer("streak").notNull().default(0),
+    longestStreak: integer("longest_streak").notNull().default(0),
+    streakLastDay: day("streak_last_day"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userLow, t.userHigh] }), index().on(t.userHigh)],
+);
+
+export const friendInvites = pgTable("friend_invites", {
+  code: text("code").primaryKey(),
+  inviterId: uuid("inviter_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  uses: integer("uses").notNull().default(0),
+  maxUses: integer("max_uses").notNull().default(20),
+  createdAt: createdAt(),
+});
+
+export const userBlocks = pgTable(
+  "user_blocks",
+  {
+    blockerId: uuid("blocker_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    blockedId: uuid("blocked_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] })],
+);
+
+export const userReports = pgTable("user_reports", {
+  id: id(),
+  reporterId: uuid("reporter_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  reportedId: uuid("reported_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  context: text("context"),
+  status: text("status").notNull().default("open"),
+  createdAt: createdAt(),
+});
+
+/** Asynchronous friend challenge: a frozen round set both players get. */
+export const friendChallenges = pgTable("friend_challenges", {
+  id: id(),
+  code: text("code").notNull().unique(),
+  creatorId: uuid("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  gameTypeId: text("game_type_id").notNull(),
+  rounds: jsonb("rounds").$type<Record<string, unknown>[]>().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+});
+
+export const challengeParticipants = pgTable(
+  "challenge_participants",
+  {
+    challengeId: uuid("challenge_id")
+      .notNull()
+      .references(() => friendChallenges.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id"),
+    score: integer("score"),
+    correct: integer("correct"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.challengeId, t.userId] })],
 );

@@ -12,6 +12,7 @@ import {
   studyResourceSubskills,
   studyResourceTopics,
   studyResourceVersions,
+  vocabularyEntries,
 } from "@/db/schema";
 import { assertAdmin } from "@/features/auth/dal";
 import { getTaxonomy } from "@/features/curriculum/service";
@@ -22,6 +23,7 @@ import { decideQuestion } from "@/features/question-bank/pipeline";
 import type { NoonQuestionDTO } from "@/features/question-bank/types";
 import { runQuestionBankSync } from "@/features/question-bank/run-sync";
 import { isResourceType } from "@/features/study/providers";
+import * as lexicon from "@/features/lexicon/service";
 import { approveCorroborated, approveMeaning, decideEntry, decideRelationship, runVocabularyExtraction } from "@/features/word-bank/service";
 import { isProduction } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -309,4 +311,84 @@ export async function setResourceStatusAction(form: FormData) {
   await getDb().update(studyResources).set({ status }).where(eq(studyResources.id, id));
   await audit({ actorUserId: admin.id, action: `study_resource.${status}`, entityType: "study_resource", entityId: id });
   revalidatePath("/admin/study");
+}
+
+// ─── Lexicon (vocabulary content system) ────────────────────────────────────
+
+export async function importDatasetAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size) throw new Error("اختر ملفًا");
+    if (file.size > 3_000_000) throw new Error("الملف كبير جدًا");
+    const text = await file.text();
+    const format = file.name.toLowerCase().endsWith(".csv") ? "csv" : "markdown";
+    const { batch, created } = await lexicon.importDataset(getDb(), { text, sourceName: file.name.slice(0, 120), format, createdBy: admin.id });
+    await audit({ actorUserId: admin.id, action: "lexicon.import", entityType: "vocab_import_batch", entityId: batch.id, metadata: { created, rows: batch.rowCount } });
+    revalidatePath("/admin/lexicon");
+    const s = batch.stats as Record<string, number>;
+    return { ok: true, message: created ? `استُورد ${batch.rowCount} سجلًا: ${s.clean ?? 0} سليمة و${s.flagged ?? 0} تحتاج مراجعة.` : "هذا الملف مستورد من قبل — لم يتغير شيء." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function acceptRowAction(form: FormData) {
+  const admin = await assertAdmin();
+  const id = z.uuid().parse(form.get("id"));
+  await lexicon.acceptRow(getDb(), id, admin.id);
+  await audit({ actorUserId: admin.id, action: "lexicon.row_accept", entityType: "vocab_import_row", entityId: id });
+  revalidatePath("/admin/lexicon");
+}
+
+export async function rejectRowAction(form: FormData) {
+  const admin = await assertAdmin();
+  const id = z.uuid().parse(form.get("id"));
+  await lexicon.rejectRow(getDb(), id, admin.id, sanitizeText(String(form.get("note") ?? ""), 300) || undefined);
+  await audit({ actorUserId: admin.id, action: "lexicon.row_reject", entityType: "vocab_import_row", entityId: id });
+  revalidatePath("/admin/lexicon");
+}
+
+export async function editRowAction(form: FormData) {
+  const admin = await assertAdmin();
+  const id = z.uuid().parse(form.get("id"));
+  const f = (k: string) => (form.has(k) ? sanitizeText(String(form.get(k) ?? ""), 300) : undefined);
+  await lexicon.editRow(getDb(), id, { word: f("word"), meaning: f("meaning"), related: f("related"), example: f("example"), relationLabel: f("relationLabel") }, f("note"));
+  await audit({ actorUserId: admin.id, action: "lexicon.row_edit", entityType: "vocab_import_row", entityId: id });
+  if (form.get("andAccept") === "1") await lexicon.acceptRow(getDb(), id, admin.id);
+  revalidatePath("/admin/lexicon");
+}
+
+export async function acceptAllCleanAction(): Promise<void> {
+  const admin = await assertAdmin();
+  const n = await lexicon.acceptAllClean(getDb(), admin.id);
+  await audit({ actorUserId: admin.id, action: "lexicon.bulk_accept_clean", metadata: { count: n } });
+  revalidatePath("/admin/lexicon");
+}
+
+export async function mergeEntriesAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const sourceId = z.uuid().parse(form.get("sourceId"));
+    const target = sanitizeText(String(form.get("target") ?? ""), 60);
+    const { lexKey } = await import("@/features/lexicon/normalize");
+    const [t] = await getDb().select().from(vocabularyEntries).where(eq(vocabularyEntries.normalized, lexKey(target))).limit(1);
+    if (!t) throw new Error(`لا توجد كلمة «${target}»`);
+    await lexicon.mergeEntries(getDb(), { sourceId, targetId: t.id });
+    await audit({ actorUserId: admin.id, action: "lexicon.merge", entityType: "vocabulary_entry", entityId: sourceId, metadata: { into: t.id } });
+    revalidatePath("/admin/lexicon");
+    return { ok: true, message: `دُمجت في «${t.lemma}»` };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function setEntryAction(form: FormData) {
+  const admin = await assertAdmin();
+  const id = z.uuid().parse(form.get("id"));
+  const difficulty = form.get("difficulty") ? z.coerce.number().int().min(1).max(3).parse(form.get("difficulty")) : undefined;
+  const status = form.get("status") ? z.enum(["approved", "suspended"]).parse(form.get("status")) : undefined;
+  await getDb().update(vocabularyEntries).set({ ...(difficulty ? { difficulty } : {}), ...(status ? { status } : {}) }).where(eq(vocabularyEntries.id, id));
+  await audit({ actorUserId: admin.id, action: "lexicon.entry_update", entityType: "vocabulary_entry", entityId: id, metadata: { difficulty, status } });
+  revalidatePath("/admin/lexicon");
 }

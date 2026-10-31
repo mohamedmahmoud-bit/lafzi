@@ -21,7 +21,7 @@ export async function checkMissionCompletion(
   if (!a || a.missionCompletedAt) return;
   const progress = missionProgress({
     wordOfDayCompleted: a.wordOfDayCompleted,
-    dailySessionCompleted: a.sessionsCompleted > 0 || a.gamesCompleted > 0,
+    dailySessionCompleted: a.dailyChallengeCompleted || a.sessionsCompleted > 0,
   });
   if (!progress.completed) return;
   const updated = await tx
