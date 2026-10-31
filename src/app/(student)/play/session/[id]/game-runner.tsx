@@ -80,6 +80,7 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
       <p className="text-center text-sm font-bold">
         {game.nameAr}
         {view.kind === "challenge" && <span className="text-grape"> · تحدي صاحب</span>}
+        {view.categoryId && subskillNames[view.categoryId] && <span className="text-sky"> · {subskillNames[view.categoryId]}</span>}
       </p>
       {error && <p role="alert" className="bg-rose-soft text-rose rounded-xl px-4 py-3 text-sm font-semibold">{error}</p>}
 

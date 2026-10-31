@@ -223,3 +223,36 @@ export function mixedRounds(lx: Lexicon, p: { n: number; rand: Rand; category?: 
   }
   return out.slice(0, p.n);
 }
+
+/** Category → the relation it is about (null = a meaning-only category such as مفردات القدرات). */
+export function relationForCategory(category: string): RelationType | null {
+  const hit = (Object.entries(RELATION_CATEGORY) as [RelationType, string][]).find(([, c]) => c === category);
+  return hit ? hit[0] : null;
+}
+
+/**
+ * Practice ONE category: relation categories ask about that relation («ما صوت الأسد؟»), meaning
+ * categories ask about meanings — never questions from other categories.
+ */
+export function categoryRounds(lx: Lexicon, p: { category: string; n: number; rand: Rand; preferEntries?: string[] }): Round[] {
+  const type = relationForCategory(p.category);
+  if (!type) return meaningRounds(lx, { n: p.n, rand: p.rand, category: p.category, preferEntries: p.preferEntries });
+  const prefer = new Set(p.preferEntries ?? []);
+  const rels = shuffle(lx.relations.filter((r) => r.type === type), p.rand).sort((a, b) => Number(prefer.has(b.fromId)) - Number(prefer.has(a.fromId)));
+  const out: Round[] = [];
+  const usedFrom = new Set<string>();
+  for (const r of rels) {
+    if (out.length >= p.n) break;
+    if (usedFrom.has(r.fromId)) continue;
+    const q = relationRound(lx, r, p.rand);
+    if (q) {
+      out.push(q);
+      usedFrom.add(r.fromId);
+    }
+  }
+  // Synonyms/antonyms: add meaning questions about the same words when relations run short.
+  if (out.length < p.n && (type === "synonym" || type === "antonym")) {
+    out.push(...meaningRounds(lx, { n: p.n - out.length, rand: p.rand, category: p.category }).filter((m) => !out.some((o) => o.stem === m.stem)));
+  }
+  return out.slice(0, p.n);
+}

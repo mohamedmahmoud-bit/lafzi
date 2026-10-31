@@ -4,7 +4,7 @@ import { parseCsvDataset, parseMarkdownDataset } from "@/features/lexicon/datase
 import { lexKey } from "@/features/lexicon/normalize";
 import { summarize, validateRows } from "@/features/lexicon/validate";
 import type { Lexicon } from "@/features/lexicon/content";
-import { boardRounds, meaningRounds, oddOneOutRound, relationRound, unambiguousSet } from "@/features/games/vocab-builders";
+import { boardRounds, categoryRounds, meaningRounds, oddOneOutRound, relationRound, unambiguousSet } from "@/features/games/vocab-builders";
 import { profileUpdateSchema } from "@/features/profile/service";
 import { seededRandom } from "@/lib/utils";
 
@@ -120,6 +120,27 @@ describe("game builders use approved content only and avoid ambiguity", () => {
     expect(r).toBeTruthy();
     expect(r.choices).toHaveLength(4);
     expect(r.explanation).toContain(r.choices.find((c) => c.id === r.correctId)!.text);
+  });
+});
+
+describe("category practice", () => {
+  it("a relation category asks only about that relation", () => {
+    const lx = lexicon();
+    for (let seed = 1; seed < 15; seed++) {
+      const rounds = categoryRounds(lx, { category: "vo_animal_sound", n: 8, rand: seededRandom(seed) });
+      expect(rounds.length).toBeGreaterThan(0);
+      for (const r of rounds) {
+        expect(r.kind).toBe("relation");
+        expect(r.subskillId).toBe("vo_animal_sound");
+        expect(r.prompt).toContain("صوت");
+      }
+    }
+  });
+  it("animal homes stay homes, never meanings or other relations", () => {
+    for (const r of categoryRounds(lexicon(), { category: "vo_animal_home", n: 8, rand: seededRandom(2) })) {
+      expect(r.subskillId).toBe("vo_animal_home");
+      expect(r.prompt).toContain("يسكن");
+    }
   });
 });
 

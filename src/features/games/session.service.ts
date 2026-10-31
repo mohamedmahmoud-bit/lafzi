@@ -19,7 +19,7 @@ import { emitRewardAnalytics } from "@/features/gamification/reward-analytics";
 import { RewardCollector, type RewardSummary } from "@/features/gamification/rewards";
 import { awardXp, ensureDailyActivity, lockProfile } from "@/features/gamification/xp.service";
 import { loadLexicon, type Lexicon } from "@/features/lexicon/content";
-import type { RelationType } from "@/features/lexicon/mapping";
+import { RELATION_CATEGORY, type RelationType } from "@/features/lexicon/mapping";
 import { checkMissionCompletion } from "@/features/missions/service";
 import { publishedQuestions } from "@/features/question-bank/pool";
 import { addInteractions, maybeQualifyDay } from "@/features/streaks/daily-rule";
@@ -31,7 +31,7 @@ import { hashString, seededRandom, shuffle } from "@/lib/utils";
 import { eliminationHint, MAX_ROUNDS, MIN_ROUNDS, pickRounds, scoreRound, TIMED_ROUND_MS, updateMastery } from "./engine";
 import { gameById, type GameDef } from "./modes";
 import type { ClientRound, GameSummary, Round, SubskillResult } from "./types";
-import { boardRounds, meaningRounds, mixedRounds, oddOneOutRound, playableTypes } from "./vocab-builders";
+import { boardRounds, categoryRounds, meaningRounds, mixedRounds, oddOneOutRound, playableTypes, relationForCategory } from "./vocab-builders";
 
 export class GameError extends Error {
   constructor(public code: "unknown_game" | "not_live" | "content_unavailable" | "not_found" | "not_in_progress" | "bad_round" | "incomplete" | "answered" | "time_up") {
@@ -104,9 +104,10 @@ export type BuildOptions = { category?: string; relationType?: RelationType; pre
 export function buildLexiconRounds(g: GameDef, lx: Lexicon, rand: () => number, o: BuildOptions = {}): Round[] {
   switch (g.mechanic) {
     case "mcq":
-      return g.id === "daily_challenge" ? mixedRounds(lx, { n: 10, rand }) : meaningRounds(lx, { n: 8, rand, category: o.category, preferEntries: o.preferEntries });
+      if (g.id === "daily_challenge") return mixedRounds(lx, { n: 10, rand });
+      return o.category ? categoryRounds(lx, { category: o.category, n: 8, rand, preferEntries: o.preferEntries }) : meaningRounds(lx, { n: 8, rand, preferEntries: o.preferEntries });
     case "race":
-      return mixedRounds(lx, { n: 20, rand, category: o.category, preferEntries: o.preferEntries });
+      return o.category ? categoryRounds(lx, { category: o.category, n: 20, rand, preferEntries: o.preferEntries }) : mixedRounds(lx, { n: 20, rand, preferEntries: o.preferEntries });
     case "odd": {
       const out: Round[] = [];
       const seen = new Set<string>();
@@ -124,7 +125,9 @@ export function buildLexiconRounds(g: GameDef, lx: Lexicon, rand: () => number, 
     case "memory": {
       const size = g.mechanic === "match" ? BOARD_SIZE : MEMORY_PAIRS;
       const types = playableTypes(lx, size, rand);
-      const type = o.relationType && types.includes(o.relationType) ? o.relationType : shuffle(types, rand)[0];
+      const wanted = o.relationType ?? (o.category ? relationForCategory(o.category) ?? undefined : undefined);
+      if (wanted && !types.includes(wanted)) return [];
+      const type = wanted ?? shuffle(types, rand)[0];
       return type ? boardRounds(lx, type, size, rand, g.mechanic) : [];
     }
   }
@@ -177,10 +180,22 @@ export async function startGame(userId: string, gameId: string, opts: { timed?: 
   const [type] = await db.select().from(gameTypes).where(eq(gameTypes.id, gameId)).limit(1);
   if ((type?.status ?? g.status) !== "live") throw new GameError("not_live");
   const day = learningDay();
+  // A board's category is its relation's category, so a «الأصوات» board never resumes as «الجموع».
+  const categoryId = opts.category ?? (opts.relationType ? RELATION_CATEGORY[opts.relationType] : null);
+  // Resume only an unfinished round of the SAME choice; a new category always starts fresh.
   const [open] = await db
     .select({ id: gameSessions.id, deadline: gameSessions.deadlineAt })
     .from(gameSessions)
-    .where(and(eq(gameSessions.userId, userId), eq(gameSessions.gameTypeId, gameId), eq(gameSessions.day, day), eq(gameSessions.status, "in_progress"), isNull(gameSessions.challengeId)))
+    .where(
+      and(
+        eq(gameSessions.userId, userId),
+        eq(gameSessions.gameTypeId, gameId),
+        eq(gameSessions.day, day),
+        eq(gameSessions.status, "in_progress"),
+        isNull(gameSessions.challengeId),
+        categoryId ? eq(gameSessions.categoryId, categoryId) : isNull(gameSessions.categoryId),
+      ),
+    )
     .limit(1);
   if (open && (!open.deadline || open.deadline.getTime() > Date.now())) return { id: open.id, created: false };
 
@@ -194,7 +209,7 @@ export async function startGame(userId: string, gameId: string, opts: { timed?: 
     rounds = buildLexiconRounds(g, lx, seededRandom(seed), { ...opts, preferEntries: g.id === "daily_challenge" ? undefined : await dueEntries(userId) });
   }
   if (rounds.length < minRoundsFor(g)) throw new GameError("content_unavailable");
-  const id = await insertSession(userId, g, rounds, { timed: !!opts.timed, kind: g.id === "daily_challenge" ? "daily" : "normal", categoryId: opts.category ?? null });
+  const id = await insertSession(userId, g, rounds, { timed: !!opts.timed, kind: g.id === "daily_challenge" ? "daily" : "normal", categoryId });
   return { id, created: true };
 }
 
@@ -211,6 +226,7 @@ export type GameView = {
   mechanic: GameDef["mechanic"];
   kind: string;
   challengeId: string | null;
+  categoryId: string | null;
   status: string;
   timed: boolean;
   roundMs: number;
@@ -251,6 +267,7 @@ export async function getGameView(userId: string, sessionId: string): Promise<Ga
     mechanic: gameById(s.gameTypeId)?.mechanic ?? "mcq",
     kind: s.kind,
     challengeId: s.challengeId,
+    categoryId: s.categoryId,
     status: s.status,
     timed: s.timed,
     roundMs: TIMED_ROUND_MS,

@@ -133,6 +133,24 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(prog.length).toBeGreaterThan(5);
   });
 
+  it("choosing a category starts that category, even with another round still open", async () => {
+    const any = await games.startGame(c, "meaning_hunter"); // left unfinished
+    const sounds = await games.startGame(c, "meaning_hunter", { category: "vo_animal_sound" });
+    expect(sounds.id).not.toBe(any.id);
+    const rounds = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, sounds.id)))[0].rounds as { subskillId: string; kind: string }[];
+    expect(rounds.length).toBeGreaterThan(3);
+    expect(rounds.every((r) => r.subskillId === "vo_animal_sound" && r.kind === "relation")).toBe(true);
+    // Same choice again resumes that round; a different category starts a new one.
+    expect((await games.startGame(c, "meaning_hunter", { category: "vo_animal_sound" })).id).toBe(sounds.id);
+    const plurals = await games.startGame(c, "meaning_hunter", { category: "vo_plural" });
+    expect(plurals.id).not.toBe(sounds.id);
+    const pr = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, plurals.id)))[0].rounds as { subskillId: string }[];
+    expect(pr.every((r) => r.subskillId === "vo_plural")).toBe(true);
+    const q = await games.startGame(c, "meaning_hunter", { category: "vo_qudurat" });
+    const qr = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, q.id)))[0].rounds as { kind: string }[];
+    expect(qr.every((r) => r.kind === "meaning")).toBe(true);
+  });
+
   it("وصلها صح and ذاكرة لفظي: boards are unambiguous; wrong memory flips don't lock a pair", async () => {
     const m = await games.startGame(a, "match_pairs", { relationType: "animal_home" });
     const rounds = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, m.id)))[0].rounds as { correctId: string }[];
