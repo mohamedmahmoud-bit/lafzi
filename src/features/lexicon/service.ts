@@ -158,17 +158,24 @@ export async function acceptRow(db: Db, rowId: string, reviewerId: string | null
 }
 
 /** Reviewer bulk action: approve every row that passed ALL automated checks and review notes. */
-export async function acceptAllClean(db: Db, reviewerId: string | null, batchId?: string) {
+export async function acceptAllClean(db: Db, reviewerId: string | null, batchId?: string, limit?: number) {
   const rows = await db
     .select({ id: vocabImportRows.id })
     .from(vocabImportRows)
-    .where(and(eq(vocabImportRows.status, "staged"), batchId ? eq(vocabImportRows.batchId, batchId) : undefined));
+    .where(and(eq(vocabImportRows.status, "staged"), batchId ? eq(vocabImportRows.batchId, batchId) : undefined))
+    .orderBy(vocabImportRows.rowNumber)
+    .limit(limit ?? 100_000);
   let accepted = 0;
   for (const r of rows) {
     await acceptRow(db, r.id, reviewerId);
     accepted++;
   }
   return accepted;
+}
+
+export async function countClean(db: DbOrTx) {
+  const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(vocabImportRows).where(eq(vocabImportRows.status, "staged"));
+  return n;
 }
 
 export async function rejectRow(db: Db, rowId: string, reviewerId: string | null, note?: string) {

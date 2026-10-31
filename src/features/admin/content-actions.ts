@@ -359,11 +359,22 @@ export async function editRowAction(form: FormData) {
   revalidatePath("/admin/lexicon");
 }
 
-export async function acceptAllCleanAction(): Promise<void> {
+/**
+ * One batch of the reviewer's "approve all clean rows" decision. Small batches keep each request
+ * well inside serverless time limits; the page calls this repeatedly until nothing is left.
+ */
+export async function acceptCleanBatchAction(): Promise<{ ok: true; accepted: number; remaining: number } | { ok: false; error: string }> {
   const admin = await assertAdmin();
-  const n = await lexicon.acceptAllClean(getDb(), admin.id);
-  await audit({ actorUserId: admin.id, action: "lexicon.bulk_accept_clean", metadata: { count: n } });
-  revalidatePath("/admin/lexicon");
+  try {
+    const accepted = await lexicon.acceptAllClean(getDb(), admin.id, undefined, 40);
+    if (accepted) await audit({ actorUserId: admin.id, action: "lexicon.bulk_accept_clean", metadata: { count: accepted } });
+    const remaining = await lexicon.countClean(getDb());
+    if (!remaining) revalidatePath("/admin/lexicon");
+    return { ok: true, accepted, remaining };
+  } catch (e) {
+    console.error("[lexicon bulk accept]", e);
+    return { ok: false, error: (e as Error).message.slice(0, 300) };
+  }
 }
 
 export async function mergeEntriesAction(_prev: ActionState, form: FormData): Promise<ActionState> {

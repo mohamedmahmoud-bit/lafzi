@@ -6,12 +6,12 @@ import { Num } from "@/components/ui/num";
 import { Pill } from "@/components/ui/pill";
 import { getDb } from "@/db/client";
 import { entryCategories, vocabImportBatches, vocabImportRows, vocabularyEntries, vocabularyRelationships, wordSenses } from "@/db/schema";
-import { acceptAllCleanAction, acceptRowAction, editRowAction, rejectRowAction, setEntryAction } from "@/features/admin/content-actions";
+import { acceptRowAction, editRowAction, rejectRowAction, setEntryAction } from "@/features/admin/content-actions";
 import { getTaxonomy } from "@/features/curriculum/service";
 import { RELATION_TEXT, type RelationType } from "@/features/lexicon/mapping";
 import { lexiconStats } from "@/features/lexicon/service";
 import { cn } from "@/lib/utils";
-import { ImportDatasetForm, MergeForm } from "./forms";
+import { AcceptCleanButton, ImportDatasetForm, MergeForm } from "./forms";
 
 export const metadata = { title: "مكتبة الكلمات" };
 export const maxDuration = 300;
@@ -59,7 +59,7 @@ export default async function LexiconAdmin({ searchParams }: { searchParams: Pro
         <Card>
           <CardTitle>قرار المراجِع</CardTitle>
           <CardHint>يعتمد كل السجلات التي اجتازت جميع الفحوص الآلية وملاحظات المراجعة اللغوية. السجلات المعلَّمة تبقى لقرار فردي.</CardHint>
-          <form action={acceptAllCleanAction} className="mt-3"><Button variant="success" size="sm" disabled={!(stats.rows.staged ?? 0)}>اعتماد كل السليم ({stats.rows.staged ?? 0})</Button></form>
+          <div className="mt-3"><AcceptCleanButton count={stats.rows.staged ?? 0} /></div>
         </Card>
       </div>
 
