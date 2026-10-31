@@ -9,6 +9,11 @@ import type { NoonQuestionDTO } from "./types";
  * well inside serverless time limits. Same ingest + validation as the scheduled sync.
  */
 export async function beginImport(db: Db, p: { chapters: number[]; total: number; triggeredBy: string | null; fileNames: string[] }) {
+  // An import abandoned mid-way (tab closed, network drop) must not block the next attempt.
+  await db
+    .update(questionSyncRuns)
+    .set({ status: "failed", error: "Import abandoned before finishing", finishedAt: new Date() })
+    .where(and(eq(questionSyncRuns.status, "running"), eq(questionSyncRuns.provider, "file")));
   const [active] = await db.select({ id: questionSyncRuns.id }).from(questionSyncRuns).where(and(eq(questionSyncRuns.status, "running"), sql`${questionSyncRuns.startedAt} > now() - interval '30 minutes'`)).limit(1);
   if (active) throw new Error("A question-bank sync or import is already running");
   const [run] = await db

@@ -64,30 +64,49 @@ const dtoSchema = z
   .object({ id: z.number().int().positive(), text: z.string().nullable().optional(), choices: z.array(z.object({ id: z.union([z.number(), z.string()]) }).passthrough()).optional() })
   .passthrough();
 
+type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+/** Admin-only: return the real error text instead of React's opaque production error. */
+async function guarded<T>(fn: () => Promise<T>): Promise<Result<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (e) {
+    console.error("[admin import]", e);
+    const err = e as { issues?: { path: unknown[]; message: string }[]; message?: string };
+    const msg = err.issues ? err.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") : (err.message ?? String(e));
+    return { ok: false, error: msg.slice(0, 500) };
+  }
+}
+
 export async function beginImportAction(p: { chapters: number[]; total: number; fileNames: string[] }) {
-  const admin = await assertAdmin();
-  const chapters = z.array(z.number().int().positive()).max(20).parse(p.chapters);
-  const runId = await beginImport(getDb(), { chapters, total: z.number().int().min(1).max(50000).parse(p.total), triggeredBy: admin.id, fileNames: z.array(z.string().max(120)).max(20).parse(p.fileNames) });
-  await audit({ actorUserId: admin.id, action: "question_bank.import_start", entityType: "question_sync_run", entityId: runId, metadata: { chapters, total: p.total, files: p.fileNames } });
-  return runId;
+  return guarded(async () => {
+    const admin = await assertAdmin();
+    const chapters = z.array(z.number().int().positive()).max(20).parse(p.chapters);
+    const runId = await beginImport(getDb(), { chapters, total: z.number().int().min(1).max(50000).parse(p.total), triggeredBy: admin.id, fileNames: z.array(z.string().max(120)).max(20).parse(p.fileNames) });
+    await audit({ actorUserId: admin.id, action: "question_bank.import_start", entityType: "question_sync_run", entityId: runId, metadata: { chapters, total: p.total, files: p.fileNames } });
+    return runId;
+  });
 }
 
 export async function importBatchAction(runId: string, items: unknown[]) {
-  await assertAdmin();
-  const parsed = z.array(dtoSchema).min(1).max(100).parse(items) as unknown as NoonQuestionDTO[];
-  return importBatch(getDb(), z.uuid().parse(runId), parsed, isProduction());
+  return guarded(async () => {
+    await assertAdmin();
+    const parsed = z.array(dtoSchema).min(1).max(100).parse(items) as unknown as NoonQuestionDTO[];
+    return importBatch(getDb(), z.uuid().parse(runId), parsed, isProduction());
+  });
 }
 
 export async function finishImportAction(runId: string, p: { chapters: number[]; seenIds: number[]; complete: boolean }) {
-  const admin = await assertAdmin();
-  const run = await finishImport(getDb(), z.uuid().parse(runId), {
-    chapters: z.array(z.number().int().positive()).parse(p.chapters),
-    seenIds: z.array(z.number().int().positive()).max(50000).parse(p.seenIds),
-    complete: p.complete === true,
+  return guarded(async () => {
+    const admin = await assertAdmin();
+    const run = await finishImport(getDb(), z.uuid().parse(runId), {
+      chapters: z.array(z.number().int().positive()).parse(p.chapters),
+      seenIds: z.array(z.number().int().positive()).max(50000).parse(p.seenIds),
+      complete: p.complete === true,
+    });
+    await audit({ actorUserId: admin.id, action: "question_bank.import_finish", entityType: "question_sync_run", entityId: runId, metadata: run.stats });
+    revalidatePath("/admin/question-bank");
+    return { status: run.status, stats: run.stats };
   });
-  await audit({ actorUserId: admin.id, action: "question_bank.import_finish", entityType: "question_sync_run", entityId: runId, metadata: run.stats });
-  revalidatePath("/admin/question-bank");
-  return { status: run.status, stats: run.stats };
 }
 
 export async function publishAllReadyAction(): Promise<ActionState> {
@@ -105,8 +124,12 @@ export async function publishAllReadyAction(): Promise<ActionState> {
 
 export async function approveCorroboratedAction(): Promise<void> {
   const admin = await assertAdmin();
-  const n = await approveCorroborated(getDb(), { reviewerId: admin.id, isProduction: isProduction() });
-  await audit({ actorUserId: admin.id, action: "vocab.bulk_approve_corroborated", metadata: { count: n } });
+  try {
+    const n = await approveCorroborated(getDb(), { reviewerId: admin.id, isProduction: isProduction() });
+    await audit({ actorUserId: admin.id, action: "vocab.bulk_approve_corroborated", metadata: { count: n } });
+  } catch (e) {
+    console.error("[vocab bulk approve]", e);
+  }
   revalidatePath("/admin/vocabulary");
 }
 

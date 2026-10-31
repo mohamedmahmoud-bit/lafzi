@@ -34,12 +34,22 @@ export function ImportForm() {
       const unique = [...new Map(items.map((q) => [q.id, q])).values()];
       const chapters = [...new Set(unique.flatMap((q) => (q.curriculum ?? []).map((c) => Number(c.chapterId)).filter(Boolean)))];
       setTotal(unique.length);
-      const runId = await beginImportAction({ chapters, total: unique.length, fileNames: files.map((f) => f.name) });
+      const begun = await beginImportAction({ chapters, total: unique.length, fileNames: files.map((f) => f.name) });
+      if (!begun.ok) throw new Error(`بدء الاستيراد: ${begun.error}`);
+      const runId = begun.data;
       for (let i = 0; i < unique.length; i += BATCH) {
-        await importBatchAction(runId, unique.slice(i, i + BATCH));
+        let attempt = 0;
+        for (;;) {
+          const r = await importBatchAction(runId, unique.slice(i, i + BATCH)).catch((e: Error) => ({ ok: false as const, error: e.message }));
+          if (r.ok) break;
+          if (++attempt >= 3) throw new Error(`الدفعة ${i / BATCH + 1}: ${r.error}`);
+          await new Promise((res) => setTimeout(res, 1500 * attempt));
+        }
         setDone(Math.min(unique.length, i + BATCH));
       }
-      const res = await finishImportAction(runId, { chapters, seenIds: unique.map((q) => q.id), complete: form.get("complete") === "on" });
+      const fin = await finishImportAction(runId, { chapters, seenIds: unique.map((q) => q.id), complete: form.get("complete") === "on" });
+      if (!fin.ok) throw new Error(`إنهاء الاستيراد: ${fin.error}`);
+      const res = fin.data;
       const s = res.stats as Record<string, number>;
       setMsg({ ok: res.status === "succeeded", text: `${res.status}: جديد ${s.new ?? 0} · معدّل ${s.modified ?? 0} · بلا تغيير ${s.unchanged ?? 0} · جاهز ${s.ready ?? 0} · للمراجعة ${s.reviewRequired ?? 0} · مرفوض ${s.rejected ?? 0} · مؤرشف ${s.removed ?? 0}` });
     } catch (e) {
