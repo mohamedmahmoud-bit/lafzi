@@ -31,7 +31,7 @@ import { hashString, seededRandom, shuffle } from "@/lib/utils";
 import { eliminationHint, MAX_ROUNDS, MIN_ROUNDS, pickRounds, scoreRound, TIMED_ROUND_MS, updateMastery } from "./engine";
 import { gameById, type GameDef } from "./modes";
 import type { ClientRound, GameSummary, Round, SubskillResult } from "./types";
-import { boardRounds, playableTypes, relationForCategory } from "./vocab-builders";
+import { boardRounds, meaningRounds, playableTypes, relationForCategory } from "./vocab-builders";
 import { publishedTeacherQuestions, type TeacherQuestion } from "@/features/questions/service";
 
 export class GameError extends Error {
@@ -156,6 +156,15 @@ function board(lx: Lexicon, mechanic: "match" | "memory", rand: () => number, o:
 }
 
 /**
+ * Teacher questions first; when there aren't enough yet, «ما معنى الكلمة؟» rounds built only from the
+ * approved dictionary (word → its approved meaning among other approved, non-synonym meanings).
+ */
+function withMeaningFallback(teacher: Round[], lx: Lexicon, n: number, rand: () => number, o: BuildOptions): Round[] {
+  if (teacher.length >= Math.min(n, MIN_ROUNDS)) return teacher;
+  return meaningRounds(lx, { n, category: o.category, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries, minHardness: 3 });
+}
+
+/**
  * Build a vocabulary game's rounds. Multiple-choice games use ONLY teacher-written questions;
  * boards pair approved words (no question text is composed).
  */
@@ -166,9 +175,9 @@ export function buildLexiconRounds(g: GameDef, c: GameContent, rand: () => numbe
         const qs = teacherRounds(c.questions, { n: 10, rand });
         return qs.length >= 10 ? qs : board(c.lx, "match", rand, {});
       }
-      return teacherRounds(c.questions, { n: 8, rand, category: o.category, recent: o.recentQuestions });
+      return withMeaningFallback(teacherRounds(c.questions, { n: 8, rand, category: o.category, recent: o.recentQuestions }), c.lx, 8, rand, o);
     case "race":
-      return teacherRounds(c.questions, { n: 20, rand, category: o.category, recent: o.recentQuestions });
+      return withMeaningFallback(teacherRounds(c.questions, { n: 20, rand, category: o.category, recent: o.recentQuestions }), c.lx, 20, rand, o);
     case "odd":
       return [];
     case "match":

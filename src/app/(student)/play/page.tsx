@@ -54,7 +54,7 @@ export default async function PlayHub() {
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-xl font-bold">{g.nameAr}</p>
                   <p className="text-muted text-sm">{g.tagline}</p>
-                  {!g.playable && <Pill tone="xp" className="mt-1">{g.mechanic === "mcq" || g.mechanic === "race" ? "بانتظار أسئلة المعلم" : "بانتظار كلمات معتمدة"}</Pill>}
+                  {!g.playable && <Pill tone="xp" className="mt-1">بانتظار كلمات معتمدة</Pill>}
                 </div>
                 <ChevronLeft aria-hidden className="text-muted size-5" />
               </Card>

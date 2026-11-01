@@ -46,7 +46,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
 
       {!playable ? (
         <Card className="text-center">
-          <CardTitle>{usesCategory ? "بانتظار أسئلة المعلم" : "بانتظار كلمات معتمدة"}</CardTitle>
+          <CardTitle>بانتظار كلمات معتمدة</CardTitle>
           <CardHint className="mt-2">{usesCategory ? "هذه اللعبة تعرض فقط أسئلة كتبها فريق لفظي واعتمدها — لا نؤلف أسئلة آليًا." : "تظهر الجولات بعد مراجعة الكلمات واعتمادها."}</CardHint>
           <ButtonLink href="/play" variant="outline" className="mt-4">ألعاب أخرى</ButtonLink>
         </Card>
@@ -84,7 +84,7 @@ export default async function GamePage({ params, searchParams }: { params: Promi
               </div>
             </Card>
           )}
-          {g.mechanic === "race" && <CardHint className="text-center">٧٥ ثانية على أسئلة المعلم. الإجابة الصحيحة تكسب نقاطًا، والسرعة المعقولة تضيف مكافأة.</CardHint>}
+          {g.mechanic === "race" && <CardHint className="text-center">٧٥ ثانية. الإجابة الصحيحة تكسب نقاطًا، والسرعة المعقولة تضيف مكافأة.</CardHint>}
         </>
       )}
     </div>

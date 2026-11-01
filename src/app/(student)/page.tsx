@@ -101,7 +101,7 @@ function TodayChallenge({ d }: { d: DashboardData }) {
             </form>
           )
         )}
-        {!d.daily.playable && <CardHint>تحدي اليوم يظهر بعد اعتماد الكلمات أو أسئلة المعلم.</CardHint>}
+        {!d.daily.playable && <CardHint>تحدي اليوم يظهر بعد اعتماد الكلمات.</CardHint>}
       </div>
     </Card>
   );

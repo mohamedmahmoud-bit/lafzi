@@ -20,9 +20,9 @@ export type GameDef = {
 };
 
 export const GAMES: GameDef[] = [
-  { id: "meaning_hunter", nameAr: "صائد المعاني", topicId: "vocabulary", tagline: "أسئلة المعلم — اختر الإجابة الصحيحة", description: "أسئلة كتبها فريق لفظي، يختار منها اللعب في كل جولة.", status: "live", source: "lexicon", section: "play", mechanic: "mcq", icon: "target", minutes: 2, sort: 1 },
+  { id: "meaning_hunter", nameAr: "صائد المعاني", topicId: "vocabulary", tagline: "شوف الكلمة واختر معناها", description: "كلمات وأسئلة معتمدة من فريق لفظي — اختر المعنى الصحيح.", status: "live", source: "lexicon", section: "play", mechanic: "mcq", icon: "target", minutes: 2, sort: 1 },
   { id: "match_pairs", nameAr: "وصلها صح", topicId: "vocabulary", tagline: "صِل كل كلمة بقرينتها", description: "أصوات، صغار، مساكن، جموع، مرادفات وأضداد — صِل الأزواج كلها.", status: "live", source: "lexicon", section: "play", mechanic: "match", icon: "link", minutes: 2, sort: 2 },
-  { id: "word_race", nameAr: "سباق الكلمات", topicId: "vocabulary", tagline: "٧٥ ثانية… كم سؤالًا تلحق؟", description: "أسئلة المعلم ضد الوقت: الدقة أولًا، والسرعة تضيف نقاطًا.", status: "live", source: "lexicon", section: "play", mechanic: "race", icon: "timer", minutes: 2, sort: 3 },
+  { id: "word_race", nameAr: "سباق الكلمات", topicId: "vocabulary", tagline: "٧٥ ثانية… كم سؤالًا تلحق؟", description: "كلمات ومعانٍ ضد الوقت: الدقة أولًا، والسرعة تضيف نقاطًا.", status: "live", source: "lexicon", section: "play", mechanic: "race", icon: "timer", minutes: 2, sort: 3 },
   { id: "odd_one_out", nameAr: "الكلمة الدخيلة", topicId: "vocabulary", tagline: "", description: "أوقفت: كانت أسئلتها تُبنى آليًا.", status: "retired", source: "lexicon", section: "hidden", mechanic: "odd", icon: "search", minutes: 2, sort: 4 },
   { id: "memory", nameAr: "ذاكرة لفظي", topicId: "vocabulary", tagline: "اقلب البطاقات وطابق الأزواج", description: "بطاقات مقلوبة: طابق كل كلمة بقرينتها بأقل عدد من المحاولات.", status: "live", source: "lexicon", section: "play", mechanic: "memory", icon: "brain", minutes: 3, sort: 5 },
   { id: "daily_challenge", nameAr: "تحدي اليوم", topicId: "vocabulary", tagline: "نفس التحدي لكل الطلاب اليوم", description: "تحدٍّ قصير واحد لكل الطلاب اليوم — يحسب لسلسلتك ومهمتك.", status: "live", source: "daily", section: "hidden", mechanic: "mcq", icon: "flame", minutes: 3, sort: 0 },

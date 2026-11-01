@@ -109,12 +109,25 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(cats.map((x) => x.categoryId).sort()).toEqual(expect.arrayContaining(["vo_animal_sound", "vo_animal_young", "vo_animal_home", "vo_animal_pair"]));
   });
 
-  it("multiple-choice games wait for teacher questions; only approved ones are played, exactly as written", async () => {
-    await expect(games.startGame(a, "meaning_hunter")).rejects.toMatchObject({ code: "content_unavailable" });
+  it("before teacher questions, meaning games use the approved dictionary; approved teacher questions then take over, exactly as written", async () => {
+    const pre = await games.startGame(c, "meaning_hunter");
+    const pr = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, pre.id)))[0].rounds as { kind: string; stem: string; correctId: string; choices: { id: string; text: string }[] }[];
+    expect(pr.length).toBeGreaterThanOrEqual(5);
+    const senses = await getDb().select().from(s.wordSenses);
+    const meaningOf = new Map(senses.map((x) => [x.id, x.meaning]));
+    for (const r of pr) {
+      expect(r.kind).toBe("meaning");
+      expect(new Set(r.choices.map((ch) => ch.text)).size).toBe(4);
+      for (const ch of r.choices) expect(meaningOf.get(ch.id)).toBe(ch.text); // every option is an approved meaning
+    }
+    await playAll(c, pre.id);
     const r = await questionsMod.importQuestionSet(getDb(), { text: teacherFile, sourceName: "teacher.md", format: "markdown" });
     expect(r.created).toBe(true);
     expect((await questionsMod.importQuestionSet(getDb(), { text: teacherFile, sourceName: "again.md", format: "markdown" })).created).toBe(false);
-    await expect(games.startGame(a, "meaning_hunter")).rejects.toMatchObject({ code: "content_unavailable" }); // staged ≠ published
+    const staged = await games.startGame(a, "meaning_hunter");
+    const sr = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, staged.id)))[0].rounds as { kind: string }[];
+    expect(sr.every((r) => r.kind === "meaning")).toBe(true); // staged questions are not played
+    await getDb().update(s.gameSessions).set({ status: "abandoned" }).where(eq(s.gameSessions.id, staged.id));
     expect(await questionsMod.acceptCleanQuestions(getDb(), null)).toBe(30);
     const flagged = await getDb().select().from(s.teacherQuestions).where(eq(s.teacherQuestions.status, "flagged"));
     expect(flagged).toHaveLength(1);
