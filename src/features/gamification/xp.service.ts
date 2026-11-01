@@ -70,7 +70,10 @@ export async function awardXp(
       ),
     );
   const amount = computeAward(rule, earned, params.multiplier);
-  if (amount <= 0) return 0;
+  if (amount <= 0) {
+    if (rule.enabled && rule.dailyCap !== null && earned >= rule.dailyCap) rewards?.capped.push(params.action);
+    return 0;
+  }
 
   const inserted = await tx
     .insert(xpTransactions)

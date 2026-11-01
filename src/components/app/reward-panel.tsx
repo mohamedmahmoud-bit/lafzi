@@ -45,6 +45,11 @@ export function RewardPanel({ reward }: { reward: RewardSummary }) {
           </ul>
         </div>
       )}
+      {(reward.capped ?? []).includes("game_completed") && (
+        <p className="bg-surface-muted text-muted rounded-xl px-4 py-3 text-center text-sm">
+          وصلت للحد اليومي لنقاط الجولات 🎯 كمّل لعب للتدريب والإتقان، ونقاط الجولات ترجع بكرة. نقاط إتقان الكلمات والتحديات ما زالت تُحسب.
+        </p>
+      )}
       {streakUp && (
         <p className="bg-streak-soft text-streak flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold">
           <Flame aria-hidden className="size-5" />

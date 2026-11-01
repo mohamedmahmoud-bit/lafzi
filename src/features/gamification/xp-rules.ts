@@ -88,7 +88,7 @@ export const DEFAULT_XP_RULES: Record<XpAction, XpRule> = {
   game_completed: {
     action: "game_completed",
     xp: 12,
-    dailyCap: 60,
+    dailyCap: 200,
     description: "إنهاء جولة — تتضاعف حتى ×1.5 حسب الدقة",
     enabled: true,
   },

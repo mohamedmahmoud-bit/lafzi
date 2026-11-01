@@ -368,4 +368,11 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     await expect(updateProfile(b, { avatar: "hijab_sand" })).rejects.toMatchObject({ code: "invalid" });
     expect((await av(b)).gender).toBe("male");
   });
+  it("after today's round-XP cap the student is told why a round earned no XP", async () => {
+    await getDb().insert(s.xpTransactions).values({ userId: c, action: "game_completed", xp: 200, idempotencyKey: "test-cap-fill", day });
+    const { id } = await games.startGame(c, "meaning_hunter");
+    const done = await playAll(c, id);
+    expect(done.rewards.awards.map((x) => x.action)).not.toContain("game_completed");
+    expect(done.rewards.capped).toContain("game_completed");
+  });
 });

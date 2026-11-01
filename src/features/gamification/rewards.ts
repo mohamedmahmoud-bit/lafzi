@@ -9,6 +9,8 @@ export type EarnedBadge = { code: string; name: string; icon: string; descriptio
  */
 export class RewardCollector {
   awards: { action: XpAction; xp: number }[] = [];
+  /** Actions that earned nothing because today's cap was already reached (told to the student). */
+  capped: XpAction[] = [];
   badges: EarnedBadge[] = [];
   streak: StreakResult | null = null;
   levelUp: { from: number; to: number; name: string } | null = null;
@@ -22,6 +24,7 @@ export class RewardCollector {
     return {
       totalXp: this.totalXp,
       awards: this.awards,
+      capped: [...new Set(this.capped)],
       badges: this.badges,
       streak: this.streak
         ? {
@@ -39,6 +42,7 @@ export class RewardCollector {
 export type RewardSummary = {
   totalXp: number;
   awards: { action: XpAction; xp: number }[];
+  capped?: XpAction[];
   badges: EarnedBadge[];
   streak: { count: number; extended: boolean; outcome: string } | null;
   levelUp: { from: number; to: number; name: string } | null;
