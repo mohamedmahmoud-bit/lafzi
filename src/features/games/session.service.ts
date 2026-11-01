@@ -56,14 +56,16 @@ async function masteryMap(userId: string) {
   return Object.fromEntries(rows.map((r) => [r.subskillId, r.mastery])) as Record<string, number>;
 }
 
-/** Words the student should see again soon (spaced repetition). */
-async function dueEntries(userId: string) {
+/** Spaced repetition: words due again (shown first) and words already well known (skipped). */
+async function studentWords(userId: string) {
   const rows = await getDb()
-    .select({ entryId: studentVocabularyProgress.entryId, next: studentVocabularyProgress.nextReviewAt })
+    .select({ entryId: studentVocabularyProgress.entryId, next: studentVocabularyProgress.nextReviewAt, box: studentVocabularyProgress.box })
     .from(studentVocabularyProgress)
     .where(eq(studentVocabularyProgress.userId, userId));
   const now = Date.now();
-  return rows.filter((r) => r.next && r.next.getTime() <= now).map((r) => r.entryId);
+  const due = rows.filter((r) => r.next && r.next.getTime() <= now).map((r) => r.entryId);
+  const known = rows.filter((r) => r.box >= 3 && (!r.next || r.next.getTime() > now)).map((r) => r.entryId);
+  return { due, known };
 }
 
 async function recentlyAnswered(userId: string) {
@@ -98,16 +100,21 @@ async function buildQuestionRounds(userId: string, gameId: string, topicId: stri
   }));
 }
 
-export type BuildOptions = { category?: string; relationType?: RelationType; preferEntries?: string[] };
+export type BuildOptions = { category?: string; relationType?: RelationType; preferEntries?: string[]; skipEntries?: string[] };
 
 /** Build a vocabulary game's rounds from the approved lexicon (pure given lexicon + rand). */
 export function buildLexiconRounds(g: GameDef, lx: Lexicon, rand: () => number, o: BuildOptions = {}): Round[] {
   switch (g.mechanic) {
+    // Without a category the games aim at Qudurat-level words (hardness ≥ 2) and skip known words.
     case "mcq":
-      if (g.id === "daily_challenge") return mixedRounds(lx, { n: 10, rand });
-      return o.category ? categoryRounds(lx, { category: o.category, n: 8, rand, preferEntries: o.preferEntries }) : meaningRounds(lx, { n: 8, rand, preferEntries: o.preferEntries });
+      if (g.id === "daily_challenge") return mixedRounds(lx, { n: 10, rand, minHardness: 2 });
+      return o.category
+        ? categoryRounds(lx, { category: o.category, n: 8, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries })
+        : meaningRounds(lx, { n: 8, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries, minHardness: 3 });
     case "race":
-      return o.category ? categoryRounds(lx, { category: o.category, n: 20, rand, preferEntries: o.preferEntries }) : mixedRounds(lx, { n: 20, rand, preferEntries: o.preferEntries });
+      return o.category
+        ? categoryRounds(lx, { category: o.category, n: 20, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries })
+        : mixedRounds(lx, { n: 20, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries, minHardness: 2 });
     case "odd": {
       const out: Round[] = [];
       const seen = new Set<string>();
@@ -206,7 +213,8 @@ export async function startGame(userId: string, gameId: string, opts: { timed?: 
     const lx = await loadLexicon(db, { isProduction: isProduction() });
     // Daily challenge: the same set for every student today (fair to compare with friends).
     const seed = g.id === "daily_challenge" ? hashString(`daily:${day}`) : hashString(`${userId}:${gameId}:${Date.now()}`);
-    rounds = buildLexiconRounds(g, lx, seededRandom(seed), { ...opts, preferEntries: g.id === "daily_challenge" ? undefined : await dueEntries(userId) });
+    const words = g.id === "daily_challenge" ? { due: undefined, known: undefined } : await studentWords(userId);
+    rounds = buildLexiconRounds(g, lx, seededRandom(seed), { ...opts, preferEntries: words.due, skipEntries: words.known });
   }
   if (rounds.length < minRoundsFor(g)) throw new GameError("content_unavailable");
   const id = await insertSession(userId, g, rounds, { timed: !!opts.timed, kind: g.id === "daily_challenge" ? "daily" : "normal", categoryId });

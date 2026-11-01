@@ -162,7 +162,12 @@ describe.skipIf(!TEST_URL)("platform integrity (Postgres)", async () => {
     const [ans] = await getDb().select().from(s.gameSessionAnswers).limit(1);
     const question = (await getDb().select().from(s.noonQuestions).where(eq(s.noonQuestions.id, ans.questionId!)))[0];
     const oldVersion = ans.questionVersionId;
-    provider.data = provider.data.map((d) => (d.id === question.noonQuestionId ? { ...d, correctChoiceId: d.choices![1].id, correctChoiceIds: [d.choices![1].id] } : d));
+    // Move the answer to a DIFFERENT option than the current one.
+    provider.data = provider.data.map((d) => {
+      if (d.id !== question.noonQuestionId) return d;
+      const other = d.choices!.find((c) => c.id !== d.correctChoiceId)!.id;
+      return { ...d, correctChoiceId: other, correctChoiceIds: [other] };
+    });
     const run = await sync();
     expect(run.stats.modified).toBeGreaterThanOrEqual(1);
     expect(run.stats.suspended).toBeGreaterThanOrEqual(1);

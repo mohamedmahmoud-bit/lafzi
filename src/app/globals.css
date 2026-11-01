@@ -191,3 +191,8 @@ body {
 .flip-card[data-open="true"] .flip-inner { transform: rotateY(180deg); }
 .flip-face { position: absolute; inset: 0; backface-visibility: hidden; }
 .flip-back { transform: rotateY(180deg); }
+
+@keyframes drain {
+  from { width: 100%; }
+  to { width: 0%; }
+}

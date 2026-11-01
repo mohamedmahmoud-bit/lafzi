@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, Clock, Flame, Lightbulb, RotateCcw, Share2, Swords, X } from "lucide-react";
+import { Clock, Flame, Lightbulb, RotateCcw, Share2, Swords, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -107,7 +107,14 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
   );
 }
 
-/** Multiple-choice rounds (صائد المعاني، الدخيلة، تحدي اليوم) and the timed race. */
+/** Pace after an answer: correct moves on fast; a mistake stays long enough to read the right answer. */
+const NEXT_AFTER_CORRECT_MS = 600;
+const NEXT_AFTER_WRONG_MS = 2200;
+
+/**
+ * Multiple-choice rounds (صائد المعاني، الدخيلة، تحدي اليوم، السباق). No «التالي» button: the game
+ * advances by itself, and after a mistake a tap anywhere on the card skips the pause.
+ */
 function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish, pending }: { view: GameView; rounds: ClientRound[]; patch: (i: number, a: ClientRound["answered"]) => void; update: (i: number, p: Partial<ClientRound>) => void; addScore: (p: number) => void; onError: (e: string | null) => void; onFinish: () => void; pending: boolean }) {
   const race = view.mechanic === "race";
   const first = useMemo(() => {
@@ -119,22 +126,35 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, start] = useTransition();
   const [flash, setFlash] = useState<"ok" | "no" | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const r = rounds[index];
-  const isLast = index === rounds.length - 1;
-  const allAnswered = rounds.every((x) => x.answered);
 
-  const next = useCallback(() => {
-    setSelected(null);
-    setFlash(null);
-    const n = rounds.findIndex((x, j) => j > index && !x.answered);
-    if (n !== -1) setIndex(n);
-    else if (race) onFinish();
-  }, [rounds, index, race, onFinish]);
+  // Every round already answered (e.g. reopened page) → straight to the results.
+  useEffect(() => {
+    if (rounds.length && rounds.every((x) => x.answered)) onFinish();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const advance = useCallback(
+    (from: number, answeredNow: number) => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      setSelected(null);
+      setFlash(null);
+      const n = rounds.findIndex((x, j) => j !== from && j !== answeredNow && !x.answered);
+      if (n === -1) onFinish();
+      else setIndex(n);
+    },
+    [rounds, onFinish],
+  );
 
   const onSelect = (choiceId: string) => {
+    if (r.answered || busy) return;
     setSelected(choiceId);
+    const at = index;
     start(async () => {
-      const res = await answerRoundAction({ sessionId: view.id, round: index, choiceId });
+      const res = await answerRoundAction({ sessionId: view.id, round: at, choiceId });
       if (!res.ok) {
         onError(res.error);
         if (res.error.includes("الوقت")) onFinish();
@@ -142,9 +162,9 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
       }
       onError(null);
       addScore(res.data.points);
-      patch(index, { choiceId, isCorrect: res.data.isCorrect, correctId: res.data.correctId, explanation: res.data.explanation, points: res.data.points, hintUsed: !!r.hintRemoved });
+      patch(at, { choiceId, isCorrect: res.data.isCorrect, correctId: res.data.correctId, explanation: res.data.explanation, points: res.data.points, hintUsed: !!r.hintRemoved });
       setFlash(res.data.isCorrect ? "ok" : "no");
-      if (race) setTimeout(next, res.data.isCorrect ? 450 : 1100);
+      timer.current = setTimeout(() => advance(at, at), res.data.isCorrect ? NEXT_AFTER_CORRECT_MS : NEXT_AFTER_WRONG_MS);
     });
   };
 
@@ -157,10 +177,15 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
     });
 
   if (!r) return null;
+  const waitingAfterMistake = !!r.answered && !r.answered.isCorrect;
   return (
     <>
       {race && view.deadlineAt && <RaceClock deadline={view.deadlineAt} onTimeUp={onFinish} />}
-      <Card key={index} className={cn("animate-rise relative space-y-5", flash === "no" && "animate-shake")}>
+      <Card
+        key={index}
+        className={cn("animate-rise relative space-y-5", flash === "no" && "animate-shake", waitingAfterMistake && "cursor-pointer")}
+        onClick={waitingAfterMistake ? () => advance(index, index) : undefined}
+      >
         {flash === "ok" && <Confetti count={10} />}
         <p className="text-muted text-center text-sm font-semibold">{r.prompt ?? "اختر الإجابة الصحيحة"}</p>
         {r.kind !== "odd" && <p className="font-display text-center text-4xl leading-tight font-bold">{r.stem}</p>}
@@ -170,24 +195,21 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
             <Lightbulb aria-hidden className="size-4" /> {r.hintRemoved ? "استخدمت التلميح" : "تلميح (نصف النقاط)"}
           </Button>
         )}
-        {r.answered && !race && (
-          <div className="animate-rise space-y-1">
+        {r.answered && (
+          <div className="animate-rise space-y-1" aria-live="polite">
             <p className={cn("text-lg font-bold", r.answered.isCorrect ? "text-mint" : "text-rose")}>
-              {r.answered.isCorrect ? <>رائع! +<Num value={r.answered.points} /></> : "قريبة! تذكّر الإجابة المظللة"}
+              {r.answered.isCorrect ? <>صح! +<Num value={r.answered.points} /></> : "خطأ — الإجابة الصحيحة مظللة"}
             </p>
-            {r.answered.explanation && <p className="text-muted text-sm">{r.answered.explanation}</p>}
+            {!r.answered.isCorrect && r.answered.explanation && <p className="text-muted text-sm">{r.answered.explanation}</p>}
+            {waitingAfterMistake && (
+              <div className="bg-surface-muted h-1 overflow-hidden rounded-full" aria-hidden>
+                <div className="bg-rose h-full" style={{ animation: `drain ${NEXT_AFTER_WRONG_MS}ms linear forwards` }} />
+              </div>
+            )}
+            {waitingAfterMistake && <p className="text-muted text-center text-xs">اضغط للمتابعة</p>}
           </div>
         )}
       </Card>
-      {!race && r.answered && !isLast && (
-        <Button size="lg" block onClick={next}>التالي <ChevronLeft aria-hidden className="size-5" /></Button>
-      )}
-      {!race && allAnswered && (
-        <Button size="lg" block variant="success" onClick={onFinish} disabled={pending}>{pending ? "لحظة…" : "النتيجة"}</Button>
-      )}
-      {!race && r.answered && isLast && !allAnswered && (
-        <Button size="lg" block variant="outline" onClick={() => setIndex(rounds.findIndex((x) => !x.answered))}>أكمل الأسئلة المتبقية</Button>
-      )}
     </>
   );
 }

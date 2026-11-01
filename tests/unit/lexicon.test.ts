@@ -4,7 +4,7 @@ import { parseCsvDataset, parseMarkdownDataset } from "@/features/lexicon/datase
 import { lexKey } from "@/features/lexicon/normalize";
 import { summarize, validateRows } from "@/features/lexicon/validate";
 import type { Lexicon } from "@/features/lexicon/content";
-import { boardRounds, categoryRounds, meaningRounds, oddOneOutRound, relationRound, unambiguousSet } from "@/features/games/vocab-builders";
+import { boardRounds, categoryRounds, hardness, letterSimilarity, meaningRounds, sharesKeyWord, oddOneOutRound, relationRound, unambiguousSet } from "@/features/games/vocab-builders";
 import { profileUpdateSchema } from "@/features/profile/service";
 import { seededRandom } from "@/lib/utils";
 
@@ -120,6 +120,38 @@ describe("game builders use approved content only and avoid ambiguity", () => {
     expect(r).toBeTruthy();
     expect(r.choices).toHaveLength(4);
     expect(r.explanation).toContain(r.choices.find((c) => c.id === r.correctId)!.text);
+  });
+});
+
+describe("harder, fair questions", () => {
+  it("a wrong option never shares a key word with the right meaning (no two right answers)", () => {
+    expect(sharesKeyWord("ضعف، وهن", "ضعف، خور")).toBe(true);
+    expect(sharesKeyWord("توبيخ ولوم", "المصائب والشدائد")).toBe(false);
+    const lx = lexicon();
+    lx.senses.push({ id: "w1", entryId: [...lx.entries.values()].find((e) => e.lemma === "كئيب")!.id, meaning: "حزين النفس", example: null, difficulty: 2 });
+    for (let seed = 1; seed < 30; seed++) {
+      for (const r of meaningRounds(lx, { n: 6, rand: seededRandom(seed) })) {
+        const right = r.choices.find((c) => c.id === r.correctId)!.text;
+        for (const c of r.choices) if (c.id !== r.correctId) expect(sharesKeyWord(right, c.text)).toBe(false);
+      }
+    }
+  });
+  it("everyday words count as easy; look-alike answers rank as traps", () => {
+    const lx = lexicon();
+    const id = (w: string) => [...lx.entries.values()].find((e) => e.lemma === w)!.id;
+    lx.entries.get(id("سعيد"))!.categories = ["vo_synonym", "vo_antonym"];
+    lx.entries.get(id("شجاع"))!.categories = ["vo_qudurat"];
+    expect(hardness(lx, id("سعيد"))).toBe(1);
+    expect(hardness(lx, id("شجاع"))).toBe(3);
+    expect(letterSimilarity("نهيق", "نعيق")).toBeGreaterThan(letterSimilarity("نهيق", "زئير"));
+  });
+  it("the default game prefers hard words when enough exist", () => {
+    const lx = lexicon();
+    for (const e of lx.entries.values()) e.categories = ["vo_qudurat"];
+    const easy = [...lx.entries.values()].find((e) => e.lemma === "سعيد")!;
+    easy.categories = ["vo_antonym"];
+    const rounds = meaningRounds(lx, { n: 3, rand: seededRandom(4), minHardness: 3 });
+    expect(rounds.some((r) => r.stem === "سعيد")).toBe(false);
   });
 });
 
