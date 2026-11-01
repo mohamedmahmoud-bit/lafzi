@@ -97,8 +97,10 @@ export function meaningRounds(lx: Lexicon, p: { n: number; category?: string } &
     const sameCat = primaryCategory(lx, s.entryId);
     const target = lemma(lx, s.entryId);
     const len = s.meaning.length;
-    const scored = lx.senses
-      .filter((d) => !excluded.has(d.entryId) && !ownKeys.has(meaningKey(d.meaning)) && !own.some((m) => sharesKeyWord(m, d.meaning)))
+    const candidates = lx.senses.filter((d) => !excluded.has(d.entryId) && !ownKeys.has(meaningKey(d.meaning)) && !own.some((m) => sharesKeyWord(m, d.meaning)));
+    // Practising one category: every option comes from that category (sounds vs sounds, plurals vs plurals).
+    const inCategory = p.category ? candidates.filter((d) => lx.entries.get(d.entryId)?.categories.includes(p.category!)) : candidates;
+    const scored = (inCategory.length >= 3 ? inCategory : candidates)
       .map((d) => ({
         d,
         score:
@@ -140,6 +142,78 @@ export function meaningRounds(lx: Lexicon, p: { n: number; category?: string } &
 /** Rights that are valid for a left word in a relation type. */
 function rightsOf(lx: Lexicon, type: RelationType, fromId: string) {
   return new Set(lx.relations.filter((r) => r.type === type && r.fromId === fromId).map((r) => r.toId));
+}
+
+/** The words inside a lemma («هزيز وحفيف» → هزيز، حفيف), normalized. */
+const wordsOfLemma = (w: string) =>
+  lexKey(w)
+    .split(/[\s،,/]+/)
+    .map((x) => x.replace(/^و(?=...)/, ""))
+    .filter((x) => x.length >= 2);
+
+/**
+ * One relation question from approved pairs only, e.g. «ما اسم صوت «البقرة»؟» → خُوار among other
+ * approved sounds that are NOT valid for this word. The prompt is the fixed label of the relation.
+ */
+export function relationRound(lx: Lexicon, rel: LexRelation, rand: Rand): Round | null {
+  const valid = rightsOf(lx, rel.type, rel.fromId);
+  if (rel.type === "synonym" || rel.type === "antonym") {
+    // Symmetric relations: anything paired with the word in either direction is also right.
+    for (const r of lx.relations) if (r.type === rel.type && r.toId === rel.fromId) valid.add(r.fromId);
+    if (rel.type === "synonym") for (const id of synonymsOf(lx, rel.fromId)) valid.add(id);
+  }
+  const validKeys = new Set([...valid].map((id) => meaningKey(lemma(lx, id))));
+  // «نعيق ونعيب» contains the right answer «نعيق» → it can never be a wrong option.
+  const validWords = new Set([...valid].flatMap((id) => wordsOfLemma(lemma(lx, id))));
+  const answer = lemma(lx, rel.toId);
+  const others = shuffle(
+    [...new Set(lx.relations.filter((r) => r.type === rel.type && !valid.has(r.toId) && r.toId !== rel.fromId).map((r) => r.toId))].filter(
+      (id) => !validKeys.has(meaningKey(lemma(lx, id))) && !wordsOfLemma(lemma(lx, id)).some((w) => validWords.has(w)),
+    ),
+    rand,
+  )
+    .map((id) => ({ id, k: letterSimilarity(answer, lemma(lx, id)) * 2 + rand() }))
+    .sort((a, b) => b.k - a.k)
+    .map((x) => x.id);
+  const distractors: string[] = [];
+  for (const id of others) {
+    if (distractors.length >= 3) break;
+    const ws = wordsOfLemma(lemma(lx, id));
+    if (!distractors.some((d) => meaningKey(lemma(lx, d)) === meaningKey(lemma(lx, id)) || wordsOfLemma(lemma(lx, d)).some((w) => ws.includes(w)))) distractors.push(id);
+  }
+  if (distractors.length < 3) return null;
+  const choices = shuffle([rel.toId, ...distractors], rand).map((id) => ({ id, text: lemma(lx, id) }));
+  return {
+    kind: "relation",
+    prompt: RELATION_TEXT[rel.type].ask(lemma(lx, rel.fromId)),
+    questionId: null,
+    versionId: null,
+    noonQuestionId: null,
+    subskillId: RELATION_CATEGORY[rel.type],
+    difficulty: lx.entries.get(rel.fromId)?.difficulty ?? 2,
+    stem: lemma(lx, rel.fromId),
+    passage: null,
+    choices,
+    correctId: rel.toId,
+    explanation: rel.example ? `مثال: ${rel.example}` : null,
+    relationshipId: rel.id,
+    entryIds: [rel.fromId, rel.toId],
+    hintRemoved: null,
+  };
+}
+
+/** n relation questions of one type (one per left word), due words first. */
+export function relationRounds(lx: Lexicon, type: RelationType, p: { n: number } & Pick): Round[] {
+  const byFrom = new Map<string, LexRelation>();
+  for (const r of shuffle(lx.relations.filter((x) => x.type === type), p.rand)) if (!byFrom.has(r.fromId)) byFrom.set(r.fromId, r);
+  const pool = orderPool(lx, [...byFrom.values()].map((r) => ({ entryId: r.fromId, r })), p.n, p);
+  const out: Round[] = [];
+  for (const { r } of pool) {
+    if (out.length >= p.n) break;
+    const round = relationRound(lx, r, p.rand);
+    if (round) out.push(round);
+  }
+  return out;
 }
 
 /**

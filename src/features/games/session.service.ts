@@ -31,7 +31,7 @@ import { hashString, seededRandom, shuffle } from "@/lib/utils";
 import { eliminationHint, MAX_ROUNDS, MIN_ROUNDS, pickRounds, scoreRound, TIMED_ROUND_MS, updateMastery } from "./engine";
 import { gameById, type GameDef } from "./modes";
 import type { ClientRound, GameSummary, Round, SubskillResult } from "./types";
-import { boardRounds, meaningRounds, playableTypes, relationForCategory } from "./vocab-builders";
+import { boardRounds, meaningRounds, playableTypes, relationForCategory, relationRounds } from "./vocab-builders";
 import { publishedTeacherQuestions, type TeacherQuestion } from "@/features/questions/service";
 
 export class GameError extends Error {
@@ -161,6 +161,10 @@ function board(lx: Lexicon, mechanic: "match" | "memory", rand: () => number, o:
  */
 function withMeaningFallback(teacher: Round[], lx: Lexicon, n: number, rand: () => number, o: BuildOptions): Round[] {
   if (teacher.length >= Math.min(n, MIN_ROUNDS)) return teacher;
+  const type = o.relationType ?? (o.category ? relationForCategory(o.category) : null);
+  const pick = { rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries };
+  // Pair categories (sounds, young, homes, plurals…) ask about the pair itself, e.g. «ما اسم صوت «البقرة»؟».
+  if (type) return relationRounds(lx, type, { n, ...pick });
   return meaningRounds(lx, { n, category: o.category, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries, minHardness: 3 });
 }
 

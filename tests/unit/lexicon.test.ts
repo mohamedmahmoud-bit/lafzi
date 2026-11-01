@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseCsvDataset, parseMarkdownDataset } from "@/features/lexicon/dataset";
 import { lexKey } from "@/features/lexicon/normalize";
+import { RELATION_CATEGORY, RELATION_LABEL, SECTION_CATEGORY } from "@/features/lexicon/mapping";
 import { summarize, validateRows } from "@/features/lexicon/validate";
 import type { Lexicon } from "@/features/lexicon/content";
-import { boardRounds, relationForCategory, unambiguousSet } from "@/features/games/vocab-builders";
+import { boardRounds, meaningRounds, relationForCategory, relationRounds, unambiguousSet } from "@/features/games/vocab-builders";
 import { answerIndex, parseQuestionCsv, parseQuestionMarkdown } from "@/features/questions/parse";
 import { validateQuestions } from "@/features/questions/service";
 import { extractCandidates, wordsOf } from "@/features/bank-words/extract";
@@ -163,5 +164,60 @@ describe("words from the bank", () => {
     expect(lemmas.slice(0, 4)).toEqual(expect.arrayContaining(["أتراح", "أجداث"]));
     expect(lemmas).not.toContain("الشمس"); // frequent everyday word
     expect(lemmas).not.toContain("في");
+  });
+});
+
+/** A dictionary built from the real 427-row dataset (sections → categories, typed pairs, meanings). */
+function datasetLexicon(): Lexicon {
+  const rows = parseMarkdownDataset(readFileSync("data/vocabulary/lafzi-initial-427.md", "utf8"));
+  const entries: Lexicon["entries"] = new Map();
+  const ent = (w: string, cat: string) => {
+    const k = lexKey(w);
+    const e = entries.get(k) ?? { id: k, lemma: w, difficulty: 2, categories: [] as string[] };
+    if (!e.categories.includes(cat)) e.categories.push(cat);
+    entries.set(k, e);
+    return k;
+  };
+  const senses: Lexicon["senses"] = [];
+  const relations: Lexicon["relations"] = [];
+  for (const r of rows) {
+    const cat = SECTION_CATEGORY[r.section.replace(/\(\s*\d+\s*\)/, "").trim()] ?? "vo_qudurat";
+    const id = ent(r.word, cat);
+    if (r.meaning && r.meaning !== "—") senses.push({ id: `s${r.rowNumber}`, entryId: id, meaning: r.meaning, example: null, difficulty: 2 } as never);
+    const type = r.relationLabel ? RELATION_LABEL[r.relationLabel] : null;
+    if (type && r.related && r.related !== "—") relations.push({ id: `r${r.rowNumber}`, type, fromId: id, toId: ent(r.related, RELATION_CATEGORY[type]), example: r.example } as never);
+  }
+  return { entries, senses, relations } as Lexicon;
+}
+
+describe("practising one category (dictionary fallback)", () => {
+  it("animal sounds ask «ما اسم صوت …؟» and every option is an approved sound that is wrong for that animal", () => {
+    const lx = datasetLexicon();
+    for (let seed = 1; seed <= 20; seed++) {
+      const rounds = relationRounds(lx, "sound", { n: 20, rand: seededRandom(seed) });
+      expect(rounds.length).toBeGreaterThanOrEqual(10);
+      for (const r of rounds) {
+        expect(r.kind).toBe("relation");
+        expect(r.subskillId).toBe("vo_animal_sound");
+        expect(r.choices).toHaveLength(4);
+        const animal = r.entryIds![0];
+        const validForAnimal = new Set(lx.relations.filter((x) => x.type === "sound" && x.fromId === animal).map((x) => x.toId));
+        const sounds = new Set(lx.relations.filter((x) => x.type === "sound").map((x) => x.toId));
+        const words = (t: string) => lexKey(t).split(/[\s،,/]+/).map((x) => x.replace(/^و(?=...)/, ""));
+        const right = new Set(r.choices.filter((c) => validForAnimal.has(c.id)).flatMap((c) => words(c.text)));
+        for (const ch of r.choices) {
+          if (ch.id !== r.correctId) expect(words(ch.text).some((w) => right.has(w))).toBe(false); // «نعيق ونعيب» never beside «نعيق»
+          expect(sounds.has(ch.id)).toBe(true);
+          expect(validForAnimal.has(ch.id)).toBe(ch.id === r.correctId);
+        }
+      }
+    }
+  });
+  it("a meaning category keeps all four options inside that category", () => {
+    const lx = datasetLexicon();
+    const rounds = meaningRounds(lx, { n: 10, category: "vo_qudurat", rand: seededRandom(3) });
+    expect(rounds.length).toBe(10);
+    const owner = new Map(lx.senses.map((x) => [x.id, x.entryId]));
+    for (const r of rounds) for (const ch of r.choices) expect(lx.entries.get(owner.get(ch.id)!)!.categories).toContain("vo_qudurat");
   });
 });
