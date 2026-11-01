@@ -6,7 +6,7 @@ import { Num, Xp } from "@/components/ui/num";
 import { analytics } from "@/features/analytics/analytics";
 import { requireUser } from "@/features/auth/dal";
 import { getTaxonomy } from "@/features/curriculum/service";
-import { getCategoryBoard, getCohortBoard, getFriendsBoard, type BoardRow } from "@/features/leaderboard/service";
+import { getCategoryBoard, getCohortBoard, getFriendsBoard, type BoardPeriod, type BoardRow } from "@/features/leaderboard/service";
 import { listFriends } from "@/features/social/service";
 import { learningDay, weekRange } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -17,11 +17,17 @@ const TABS = [
   { id: "friends", label: "الأصدقاء" },
   { id: "category", label: "الأقسام" },
 ] as const;
+const PERIODS: { id: BoardPeriod; label: string }[] = [
+  { id: "all", label: "الترتيب العام" },
+  { id: "week", label: "هذا الأسبوع" },
+  { id: "day", label: "اليوم" },
+];
 
-export default async function LeaderboardPage({ searchParams }: { searchParams: Promise<{ tab?: string; category?: string }> }) {
+export default async function LeaderboardPage({ searchParams }: { searchParams: Promise<{ tab?: string; category?: string; period?: string }> }) {
   const user = await requireUser();
   const sp = await searchParams;
   const tab = TABS.find((t) => t.id === sp.tab)?.id ?? "cohort";
+  const period: BoardPeriod = tab === "category" ? "week" : (PERIODS.find((p) => p.id === sp.period)?.id ?? "all");
   const friends = await listFriends(user.id);
   const friendIds = friends.map((f) => f.userId);
   const tax = await getTaxonomy();
@@ -30,16 +36,16 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
   const today = learningDay();
   const wk = weekRange(today);
   const daysLeft = Math.max(0, Math.round((Date.parse(wk.end) - Date.parse(today)) / 86_400_000));
-  void analytics.track("leaderboard_viewed", { tab }, { userId: user.id });
+  void analytics.track("leaderboard_viewed", { tab, period }, { userId: user.id });
 
   let rows: BoardRow[] = [];
   let note: React.ReactNode = null;
   let unit: "xp" | "pts" = "xp";
   if (tab === "friends") {
-    rows = await getFriendsBoard(user.id, friendIds);
+    rows = await getFriendsBoard(user.id, friendIds, period);
     if (!friends.length) note = <>أضف أصحابك من <Link href="/friends" className="text-primary-ink font-semibold">صفحة الأصدقاء</Link> لتتنافسوا.</>;
   } else if (tab === "cohort") {
-    const c = await getCohortBoard(user, friendIds);
+    const c = await getCohortBoard(user, friendIds, period);
     rows = c.rows;
     note = c.authorized ? (
       <>يمكنك إخفاء نتيجتك من ترتيب الجميع من ملفك.</>
@@ -54,9 +60,16 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
   return (
     <div className="mx-auto max-w-xl space-y-4">
       <header>
-        <h1 className="font-display text-3xl font-bold">ترتيب الأسبوع</h1>
+        <h1 className="font-display text-3xl font-bold">الترتيب</h1>
         <p className="text-muted flex items-center gap-1.5 text-sm">
-          <CalendarClock aria-hidden className="size-4" /> {daysLeft > 0 ? <>ينتهي بعد <Num value={daysLeft} /> {daysLeft > 2 ? "أيام" : "يوم"}</> : "اليوم آخر أيام الأسبوع"} · يبدأ الجميع من الصفر كل أحد
+          <CalendarClock aria-hidden className="size-4" />
+          {period === "all" ? (
+            "مجموع النقاط منذ البداية"
+          ) : period === "day" ? (
+            "نقاط اليوم — يبدأ من جديد كل يوم"
+          ) : (
+            <>{daysLeft > 0 ? <>ينتهي بعد <Num value={daysLeft} /> {daysLeft > 2 ? "أيام" : "يوم"}</> : "اليوم آخر أيام الأسبوع"} · يبدأ الجميع من الصفر كل أحد</>
+          )}
         </p>
       </header>
       <nav className="bg-surface-muted flex gap-1 rounded-2xl p-1" aria-label="نطاق الترتيب">
@@ -66,6 +79,16 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
           </Link>
         ))}
       </nav>
+      {tab !== "category" && (
+        <nav className="flex gap-2" aria-label="فترة الترتيب">
+          {PERIODS.map((p) => (
+            <Link key={p.id} href={`/leaderboard?tab=${tab}&period=${p.id}`} aria-current={p.id === period ? "page" : undefined} className={cn("rounded-full border px-3 py-1 text-sm", p.id === period ? "border-sky bg-sky-soft font-bold" : "border-border text-muted")}>
+              {p.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+      {tab === "category" && <CardHint>ترتيب الأقسام يحسب نقاط هذا الأسبوع.</CardHint>}
       {tab === "category" && (
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {cats.map((c) => (
@@ -77,7 +100,7 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
       )}
       <Card className="p-2">
         {rows.length === 0 ? (
-          <CardHint className="p-4 text-center">لا نتائج بعد هذا الأسبوع — العب جولة وكن أول من يظهر هنا.</CardHint>
+          <CardHint className="p-4 text-center">{period === "all" ? "لا نتائج بعد" : period === "day" ? "لا نتائج اليوم بعد" : "لا نتائج هذا الأسبوع بعد"} — العب جولة وكن أول من يظهر هنا.</CardHint>
         ) : (
           <ol className="space-y-1">
             {rows.map((r) => (

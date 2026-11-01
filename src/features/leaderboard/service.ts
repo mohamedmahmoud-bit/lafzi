@@ -118,14 +118,28 @@ export async function getWeeklyLeaderboard(user: {
 
 export type BoardRow = RankedRow & { level: number; isMe: boolean };
 
-async function weekXpFor(userIds: string[], start: string, end: string) {
+/** Ranking period: all-time total (default), this week (resets Sunday), or today (Riyadh day). */
+export type BoardPeriod = "all" | "week" | "day";
+export const BOARD_PERIODS: BoardPeriod[] = ["all", "week", "day"];
+
+function periodRange(period: BoardPeriod): { start: string; end: string } | null {
+  const today = learningDay();
+  if (period === "day") return { start: today, end: today };
+  if (period === "week") return weekRange(today);
+  return null;
+}
+
+async function xpFor(userIds: string[], period: BoardPeriod) {
   if (!userIds.length) return [];
+  const range = periodRange(period);
+  const conds = [inArray(xpTransactions.userId, userIds)];
+  if (range) conds.push(gte(xpTransactions.day, range.start), lte(xpTransactions.day, range.end));
   // Aggregate per student, then join (a correlated subquery here rendered unqualified column
   // names, so every student got the whole week's total).
   const weekXp = getDb()
     .select({ userId: xpTransactions.userId, xp: sql<number>`sum(${xpTransactions.xp})::int`.as("xp") })
     .from(xpTransactions)
-    .where(and(gte(xpTransactions.day, start), lte(xpTransactions.day, end), inArray(xpTransactions.userId, userIds)))
+    .where(and(...conds))
     .groupBy(xpTransactions.userId)
     .as("week_xp");
   return getDb()
@@ -142,27 +156,25 @@ async function weekXpFor(userIds: string[], start: string, end: string) {
 }
 
 /** Friends board: you + accepted, unblocked friends. Names are visible to friends. */
-export async function getFriendsBoard(userId: string, friendIds: string[]): Promise<BoardRow[]> {
-  const week = weekRange(learningDay());
-  const rows = await weekXpFor([userId, ...friendIds], week.start, week.end);
+export async function getFriendsBoard(userId: string, friendIds: string[], period: BoardPeriod = "all"): Promise<BoardRow[]> {
+  const rows = await xpFor([userId, ...friendIds], period);
   const lv = new Map(rows.map((r) => [r.userId, r.level]));
   return rankRows(rows).map((r) => ({ ...r, level: lv.get(r.userId) ?? 1, isMe: r.userId === userId }));
 }
 
 /**
- * Cohort board. Only students who opted in to share scores are listed. Full names of non-friends
+ * Cohort board (all-time by default). Only students who opted in to share scores are listed. Full names of non-friends
  * appear only when COHORT_LEADERBOARD_NAMES is authorised; otherwise the audience is restricted to
  * friends (no invented nicknames) and the student just sees their own position.
  */
-export async function getCohortBoard(user: { id: string; cohortId: string | null }, friendIds: string[]) {
-  const week = weekRange(learningDay());
+export async function getCohortBoard(user: { id: string; cohortId: string | null }, friendIds: string[], period: BoardPeriod = "all") {
   // Students without a cohort compete with everyone (all students are one group until Noon classes exist).
   const members = await getDb()
     .select({ userId: studentProfiles.userId, share: studentProfiles.shareScores })
     .from(studentProfiles)
     .where(user.cohortId ? eq(studentProfiles.cohortId, user.cohortId) : undefined);
   const eligible = members.filter((m) => m.share || m.userId === user.id).map((m) => m.userId);
-  const all = await weekXpFor(eligible, week.start, week.end);
+  const all = await xpFor(eligible, period);
   const lv = new Map(all.map((r) => [r.userId, r.level]));
   const ranked: BoardRow[] = rankRows(all).map((r) => ({ ...r, level: lv.get(r.userId) ?? 1, isMe: r.userId === user.id }));
   const me = ranked.find((r) => r.isMe) ?? null;

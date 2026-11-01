@@ -63,7 +63,7 @@ export default async function ProfilePage() {
             </li>
           ))}
         </ol>
-        {myRank && <CardHint className="mt-2">ترتيبك بين أصدقائك هذا الأسبوع: <strong className="font-num">#{myRank}</strong></CardHint>}
+        {myRank && <CardHint className="mt-2">ترتيبك بين أصدقائك: <strong className="font-num">#{myRank}</strong></CardHint>}
       </Card>
 
       <Card>

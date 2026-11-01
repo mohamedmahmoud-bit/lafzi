@@ -301,6 +301,16 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
       expect(r.xp).toBe(own.xp);
     }
     expect(new Set(board.rows.map((r) => r.xp)).size).toBeGreaterThan(1);
+    // All-time is the default; week and day count only their period.
+    const { addDays } = await import("@/lib/time");
+    await getDb().insert(s.xpTransactions).values({ userId: b, action: "test_old", xp: 40, idempotencyKey: "test-old-xp", day: addDays(day, -8) });
+    const xpOf = (rows: { userId: string; xp: number }[]) => rows.find((r) => r.userId === b)!.xp;
+    const all = await getCohortBoard({ id: a, cohortId: prof.cohortId }, [b]);
+    const week = await getCohortBoard({ id: a, cohortId: prof.cohortId }, [b], "week");
+    const today = await getCohortBoard({ id: a, cohortId: prof.cohortId }, [b], "day");
+    expect(xpOf(all.rows)).toBe(xpOf(week.rows) + 40);
+    expect(xpOf(today.rows)).toBe(xpOf(week.rows)); // all other test XP was earned today
+    expect(xpOf(await getFriendsBoard(a, [b]))).toBe(xpOf(all.rows));
     await updateProfile(c, { shareScores: false });
     const hidden = await getCohortBoard({ id: a, cohortId: prof.cohortId }, [b]);
     expect(hidden.rows.some((r) => r.userId === c)).toBe(false);
