@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, type Tx } from "@/db/client";
 import {
@@ -373,14 +374,34 @@ async function reviewWords(tx: Tx, userId: string, entryIds: string[], isCorrect
   }
 }
 
+/**
+ * Per-answer bookkeeping (streak interactions, spaced repetition, mastery XP) runs right AFTER the
+ * graded answer is sent back, so feedback isn't waiting on it. Outside a request (tests, scripts)
+ * it runs inline.
+ */
+async function recordPractice(userId: string, entryIds: string[], isCorrect: boolean) {
+  const work = async () => {
+    const day = learningDay();
+    await getDb().transaction(async (tx) => {
+      await lockProfile(tx, userId);
+      await addInteractions(tx, userId, day, 1);
+      await reviewWords(tx, userId, entryIds, isCorrect, day);
+    });
+  };
+  try {
+    after(() => work().catch((e) => console.error("[games] practice bookkeeping failed", e)));
+  } catch {
+    await work();
+  }
+}
+
 function assertWithinDeadline(s: typeof gameSessions.$inferSelect) {
   if (s.deadlineAt && Date.now() > s.deadlineAt.getTime() + RACE_GRACE_MS) throw new GameError("time_up");
 }
 
 /** Grade one round on the server. Idempotent; timing is measured server-side. */
 export async function answerRound(userId: string, sessionId: string, roundIndex: number, choiceId: string) {
-  return getDb().transaction(async (tx) => {
-    await lockProfile(tx, userId);
+  const out = await getDb().transaction(async (tx) => {
     const [s] = await tx.select().from(gameSessions).where(and(eq(gameSessions.id, sessionId), eq(gameSessions.userId, userId))).for("update").limit(1);
     if (!s) throw new GameError("not_found");
     const rounds = s.rounds as unknown as Round[];
@@ -410,11 +431,11 @@ export async function answerRound(userId: string, sessionId: string, roundIndex:
       .update(gameSessions)
       .set({ score: sql`${gameSessions.score} + ${points}`, correctCount: sql`${gameSessions.correctCount} + ${isCorrect ? 1 : 0}` })
       .where(eq(gameSessions.id, s.id));
-    const day = learningDay();
-    await addInteractions(tx, userId, day, 1);
-    await reviewWords(tx, userId, r.entryIds ?? [], isCorrect, day);
-    return { isCorrect, correctId: r.correctId, explanation: r.explanation, points, replay: false };
+    return { isCorrect, correctId: r.correctId, explanation: r.explanation, points, replay: false, entryIds: r.entryIds ?? [] };
   });
+  const { entryIds, ...result } = { entryIds: [] as string[], ...out };
+  if (!result.replay) await recordPractice(userId, entryIds, result.isCorrect);
+  return result;
 }
 
 /**
@@ -426,8 +447,7 @@ export async function answerRound(userId: string, sessionId: string, roundIndex:
  * before (an exploring flip) — only a real memory slip lowers the score.
  */
 export async function memoryAttempt(userId: string, sessionId: string, roundIndex: number, choiceId: string, counted = true) {
-  return getDb().transaction(async (tx) => {
-    await lockProfile(tx, userId);
+  const out = await getDb().transaction(async (tx) => {
     const [s] = await tx.select().from(gameSessions).where(and(eq(gameSessions.id, sessionId), eq(gameSessions.userId, userId))).for("update").limit(1);
     if (!s) throw new GameError("not_found");
     if (s.status !== "in_progress") throw new GameError("not_in_progress");
@@ -443,11 +463,11 @@ export async function memoryAttempt(userId: string, sessionId: string, roundInde
     const points = Math.max(4, 12 - s.mistakes);
     await tx.insert(gameSessionAnswers).values({ sessionId: s.id, roundIndex, subskillId: r.subskillId, response: { choiceId }, isCorrect: true, points, hintUsed: false, timeMs: null });
     await tx.update(gameSessions).set({ score: sql`${gameSessions.score} + ${points}`, correctCount: sql`${gameSessions.correctCount} + 1` }).where(eq(gameSessions.id, s.id));
-    const day = learningDay();
-    await addInteractions(tx, userId, day, 1);
-    await reviewWords(tx, userId, r.entryIds ?? [], true, day);
-    return { matched: true, points, mistakes: s.mistakes };
+    return { matched: true, points, mistakes: s.mistakes, entryIds: r.entryIds ?? [] };
   });
+  const { entryIds, ...result } = { entryIds: [] as string[], ...out };
+  if (entryIds.length || (result.matched && result.points > 0)) await recordPractice(userId, entryIds, true);
+  return result;
 }
 
 /** Finish once: XP (accuracy-weighted, capped), streak rule, mission, badges, mastery, leaderboards, challenges. */
