@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 
 export const metadata = { title: "الرئيسية" };
 
+import { GenderPrompt } from "./gender-prompt";
+
 export default async function HomePage() {
   const user = await requireUser();
   const d = await getDashboard(user);
@@ -23,6 +25,7 @@ export default async function HomePage() {
   return (
     <div className="mx-auto grid max-w-5xl min-w-0 gap-4 lg:grid-cols-3">
       <div className="grid min-w-0 content-start gap-4 lg:col-span-2">
+        {!d.gender && <GenderPrompt />}
         <StreakHero d={d} />
         <TodayChallenge d={d} />
         <QuickPlay d={d} />

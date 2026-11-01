@@ -3,7 +3,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db/client";
 import { badges, studentBadges, studentDailyActivity, studentProfiles } from "@/db/schema";
-import { AVATAR_KEYS } from "@/config/brand-assets";
+import { AVATAR_KEYS, avatarsFor, DEFAULT_AVATAR, type Gender } from "@/config/brand-assets";
 import { levelFor } from "@/features/gamification/levels";
 import { getLevels } from "@/features/gamification/xp.service";
 import { displayStreak } from "@/features/streaks/streak";
@@ -16,6 +16,7 @@ import { addDays, learningDay } from "@/lib/time";
 export const profileUpdateSchema = z
   .object({
     avatar: z.enum(AVATAR_KEYS).optional(),
+    gender: z.enum(["male", "female"]).optional(),
     shareScores: z.boolean().optional(),
     profileVisibility: z.enum(["friends", "private"]).optional(),
   })
@@ -33,7 +34,16 @@ export async function updateProfile(userId: string, input: unknown) {
   const parsed = profileUpdateSchema.safeParse(input);
   if (!parsed.success) throw new ProfileError("invalid");
   if (!Object.keys(parsed.data).length) return;
-  await getDb().update(studentProfiles).set(parsed.data).where(eq(studentProfiles.userId, userId));
+  const update: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.avatar || parsed.data.gender) {
+    const [cur] = await getDb().select({ gender: studentProfiles.gender, avatar: studentProfiles.avatar }).from(studentProfiles).where(eq(studentProfiles.userId, userId)).limit(1);
+    const gender = (parsed.data.gender ?? cur?.gender ?? null) as Gender | null;
+    const allowed: string[] = avatarsFor(gender);
+    if (parsed.data.avatar && !allowed.includes(parsed.data.avatar)) throw new ProfileError("invalid");
+    // Choosing «طالبة/طالب» swaps an avatar that doesn't match for the matching default.
+    if (!parsed.data.avatar && gender && cur && !allowed.includes(cur.avatar)) update.avatar = DEFAULT_AVATAR[gender];
+  }
+  await getDb().update(studentProfiles).set(update).where(eq(studentProfiles.userId, userId));
 }
 
 export async function getProfile(userId: string) {
@@ -57,6 +67,7 @@ export async function getProfile(userId: string) {
     officialName: p.officialFullName ?? p.displayName,
     identitySyncedAt: p.identitySyncedAt,
     avatar: p.avatar,
+    gender: (p.gender as Gender | null) ?? null,
     shareScores: p.shareScores,
     profileVisibility: p.profileVisibility,
     xp: p.xpTotal,

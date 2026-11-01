@@ -7,6 +7,23 @@ export const AVATAR_KEYS = [
   "shemagh", "hijab_teal", "hijab_clay", "cap", "headphones", "astronaut", "scholar", "hijab_sand",
 ] as const;
 
+export type AvatarKey = (typeof AVATAR_KEYS)[number];
+export type Gender = "male" | "female";
+
+/** Who each avatar depicts (by the picture, not the file name): girls, boys, or anyone. */
+export const AVATAR_GENDER: Record<AvatarKey, Gender | "any"> = {
+  hijab_teal: "female", hijab_clay: "female", hijab_sand: "female", gazelle: "female", fox: "female", butterfly: "female", dolphin: "female", turtle: "female",
+  shemagh: "male", falcon: "male", lion: "male", cap: "male", headphones: "male", scholar: "male", owl: "male", horse: "male", camel: "male",
+  astronaut: "any",
+};
+export const DEFAULT_AVATAR: Record<Gender, AvatarKey> = { male: "owl", female: "gazelle" };
+
+/** Avatars a student may pick: girls see girls' avatars, boys see boys' (everyone sees «any»). */
+export function avatarsFor(gender: Gender | null | undefined): AvatarKey[] {
+  if (!gender) return [...AVATAR_KEYS];
+  return AVATAR_KEYS.filter((k) => AVATAR_GENDER[k] === gender || AVATAR_GENDER[k] === "any");
+}
+
 export type IllustrationName =
   | "char_pose_think"
   | "char_pose_thumbs"

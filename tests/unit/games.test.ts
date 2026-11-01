@@ -70,3 +70,13 @@ describe("registry", () => {
     expect(nativeModesForTopic("vocabulary")).toEqual([]);
   });
 });
+
+import { AVATAR_GENDER, AVATAR_KEYS, avatarsFor } from "@/config/brand-assets";
+describe("avatars by gender", () => {
+  it("every avatar is classified; each group sees its own plus shared ones", () => {
+    expect(Object.keys(AVATAR_GENDER).sort()).toEqual([...AVATAR_KEYS].sort());
+    expect(avatarsFor("female").every((k) => AVATAR_GENDER[k] !== "male")).toBe(true);
+    expect(avatarsFor("male").every((k) => AVATAR_GENDER[k] !== "female")).toBe(true);
+    expect(avatarsFor(null)).toHaveLength(AVATAR_KEYS.length);
+  });
+});

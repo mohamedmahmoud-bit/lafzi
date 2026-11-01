@@ -7,17 +7,24 @@ import { Avatar } from "@/components/app/brand-art";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { updateProfileAction } from "@/features/profile/actions";
+import { DEFAULT_AVATAR, type Gender } from "@/config/brand-assets";
 import { cn } from "@/lib/utils";
 
 /** Live preview; saving changes only the avatar (never XP, badges, streak or name). */
-export function AvatarPicker({ current, name, avatars }: { current: string; name: string; avatars: string[] }) {
+export function AvatarPicker({ current, name, gender: savedGender, avatarGender }: { current: string; name: string; gender: Gender | null; avatarGender: Record<string, Gender | "any"> }) {
+  const [gender, setGender] = useState<Gender | null>(savedGender);
+  const avatars = Object.keys(avatarGender).filter((a) => !gender || avatarGender[a] === gender || avatarGender[a] === "any");
   const [pick, setPick] = useState(current);
+  const chooseGender = (g: Gender) => {
+    setGender(g);
+    if (avatarGender[pick] !== g && avatarGender[pick] !== "any") setPick(DEFAULT_AVATAR[g]);
+  };
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
   const save = () =>
     start(async () => {
-      const res = await updateProfileAction({ avatar: pick });
+      const res = await updateProfileAction(gender ? { avatar: pick, gender } : { avatar: pick });
       if (!res.ok) return setMsg(res.error);
       router.push("/profile");
       router.refresh();
@@ -29,6 +36,13 @@ export function AvatarPicker({ current, name, avatars }: { current: string; name
         <p className="font-display mt-3 text-xl font-bold">{name}</p>
         <p className="text-muted text-xs">معاينة مباشرة</p>
       </Card>
+      <div className="bg-surface-muted flex gap-1 rounded-2xl p-1" role="radiogroup" aria-label="أنا">
+        {(["male", "female"] as const).map((g) => (
+          <button key={g} type="button" role="radio" aria-checked={gender === g} onClick={() => chooseGender(g)} className={cn("flex-1 rounded-xl py-2 text-sm font-bold", gender === g ? "bg-surface shadow-sm" : "text-muted")}>
+            {g === "male" ? "أنا طالب" : "أنا طالبة"}
+          </button>
+        ))}
+      </div>
       <ul className="grid grid-cols-4 gap-3 sm:grid-cols-6" role="radiogroup" aria-label="الصور الرمزية">
         {avatars.map((a) => (
           <li key={a}>
@@ -39,7 +53,7 @@ export function AvatarPicker({ current, name, avatars }: { current: string; name
           </li>
         ))}
       </ul>
-      <Button size="lg" block onClick={save} disabled={pending || pick === current}>{pending ? "جارٍ الحفظ…" : "احفظ الصورة"}</Button>
+      <Button size="lg" block onClick={save} disabled={pending || (pick === current && gender === savedGender)}>{pending ? "جارٍ الحفظ…" : "احفظ الصورة"}</Button>
       {msg && <p className="text-rose text-center text-sm">{msg}</p>}
     </div>
   );

@@ -354,4 +354,16 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(after.card.media).toEqual([expect.objectContaining({ youtubeId: "dQw4w9WgXcQ", startSec: 2, endSec: 8 })]);
     expect(await media.mediaTemplateCsv(getDb())).toContain("الكلمة,النوع,الرابط");
   });
+  it("avatars: choosing «طالبة» sets a girl's avatar and only girls' avatars can be picked (and boys' for «طالب»)", async () => {
+    const av = async (u: string) => (await getDb().select().from(s.studentProfiles).where(eq(s.studentProfiles.userId, u)))[0];
+    await updateProfile(c, { avatar: "owl" }); // no gender yet → any avatar
+    await updateProfile(c, { gender: "female" });
+    expect((await av(c)).avatar).toBe("gazelle");
+    await expect(updateProfile(c, { avatar: "cap" })).rejects.toMatchObject({ code: "invalid" });
+    await updateProfile(c, { avatar: "hijab_teal" });
+    await updateProfile(c, { avatar: "astronaut" }); // for everyone
+    await updateProfile(b, { gender: "male" });
+    await expect(updateProfile(b, { avatar: "hijab_sand" })).rejects.toMatchObject({ code: "invalid" });
+    expect((await av(b)).gender).toBe("male");
+  });
 });

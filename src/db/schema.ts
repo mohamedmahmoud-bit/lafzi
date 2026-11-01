@@ -99,6 +99,8 @@ export const studentProfiles = pgTable(
     officialFullName: text("official_full_name"),
     identitySyncedAt: timestamp("identity_synced_at", { withTimezone: true }),
     avatar: text("avatar").notNull().default("owl"),
+    /** Self-declared by the student (Noon doesn't send it): male | female. Only used to pick avatars. */
+    gender: text("gender"),
     /** Appear on the everyone/cohort leaderboard (on by default; a student can hide). */
     shareScores: boolean("share_scores").notNull().default(true),
     /** Who can open the profile: friends | private. */

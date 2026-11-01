@@ -62,6 +62,7 @@ export async function getDashboard(user: CurrentUser) {
     today,
     name: profile.officialFullName ?? profile.displayName,
     avatar: profile.avatar,
+    gender: profile.gender,
     xpTotal: profile.xpTotal,
     xpToday: activity?.xpEarned ?? 0,
     level,
