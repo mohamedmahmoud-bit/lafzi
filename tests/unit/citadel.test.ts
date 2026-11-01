@@ -138,5 +138,11 @@ describe("official name", () => {
     expect(CitadelIdentityProvider.officialName({ name: "Sara  Mohammed Alotaibi" })).toBe("Sara Mohammed Alotaibi");
     expect(CitadelIdentityProvider.officialName({ name: "Sara Alotaibi", nameAr: "سارة العتيبي" })).toBe("سارة العتيبي");
     expect(CitadelIdentityProvider.officialName({ name: "Sara", localizedNames: { ar: "سارة محمد" } })).toBe("سارة محمد");
+    // Split or longer name fields are joined / preferred; nicknames and emails are ignored.
+    expect(CitadelIdentityProvider.officialName({ name: "Manal", firstName: "Manal", lastName: "Hassan" })).toBe("Manal Hassan");
+    expect(CitadelIdentityProvider.officialName({ name: "Manal", fullName: "Manal Ahmed Hassan" })).toBe("Manal Ahmed Hassan");
+    expect(CitadelIdentityProvider.officialName({ name: "Manal", first_name_ar: "منال", last_name_ar: "حسن" })).toBe("منال حسن");
+    expect(CitadelIdentityProvider.officialName({ name: "Manal", userName: "manal.hassan.2009" })).toBe("Manal");
+    expect(CitadelIdentityProvider.officialName({ name: "Manal" })).toBe("Manal");
   });
 });

@@ -142,32 +142,49 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
   }
 
   /**
-   * The student's FULL official name exactly as Noon provides it. If Noon sends an Arabic-script
-   * name in any name field (e.g. nameAr / arabicName / localized names), that one wins; we never
-   * transliterate or invent a name.
+   * The student's FULL official name exactly as Noon provides it. Preference: an Arabic-script name
+   * from any name field (nameAr, localized names…), then the longest name (fullName, or first +
+   * middle + last joined), then `name`. We never transliterate, translate or invent a name.
    */
   static officialName(p: Record<string, unknown>): string {
     const arabic = /[\u0600-\u06FF]/;
+    const clean = (v: string) => v.trim().replace(/\s+/g, " ");
     const candidates: string[] = [];
-    // Strings under a "name" key, or anywhere inside a name/localized/translations object.
     const visit = (o: Record<string, unknown>, depth: number, inName: boolean) => {
+      // Split names (firstName / middleName / lastName, also *Ar variants) → one full name per script.
+      const parts = (suffix: string) =>
+        ["first", "second", "middle", "third", "father", "grandfather", "last", "family"]
+          .map((k) => Object.entries(o).find(([key, v]) => typeof v === "string" && new RegExp(`^${k}_?name${suffix}$`, "i").test(key))?.[1] as string | undefined)
+          .filter((v): v is string => !!v && !!v.trim());
+      for (const suffix of ["", "_?ar", "_?arabic"]) {
+        const ps = parts(suffix);
+        if (ps.length > 1) candidates.push(clean(ps.join(" ")));
+      }
       for (const [k, v] of Object.entries(o)) {
-        const nameKey = /name/i.test(k);
-        if (typeof v === "string" && (nameKey || inName) && v.trim()) candidates.push(v.trim());
+        const nameKey = /name/i.test(k) && !/user_?name|nick/i.test(k);
+        if (typeof v === "string" && (nameKey || inName) && v.trim()) candidates.push(clean(v));
         else if (v && typeof v === "object" && !Array.isArray(v) && depth < 2 && (nameKey || /local|transl/i.test(k))) visit(v as Record<string, unknown>, depth + 1, true);
       }
     };
     visit(p, 0, false);
-    const ar = candidates.find((c) => arabic.test(c));
-    return (ar ?? String(p.name ?? "").trim()).replace(/\s+/g, " ");
+    const words = (c: string) => c.split(" ").length;
+    const longest = (cs: string[]) => cs.reduce<string | undefined>((best, c) => (!best || words(c) > words(best) ? c : best), undefined);
+    return longest(candidates.filter((c) => arabic.test(c))) ?? longest(candidates.filter((c) => !c.includes("@"))) ?? clean(String(p.name ?? ""));
+  }
+
+  /** Field NAMES only (never values) — shows whether Noon offers a full or Arabic name field. */
+  static logNameFields(where: string, p: Record<string, unknown>) {
+    const nested = Object.entries(p)
+      .filter(([, v]) => v && typeof v === "object" && !Array.isArray(v))
+      .map(([k, v]) => `${k}{${Object.keys(v as object).join(",")}}`);
+    console.info(`[citadel] ${where} fields:`, [...Object.keys(p), ...nested].join(","));
   }
 
   /** Profile returned next to the token: { id, name, avatarUri, locale, userType, account: { email } }. */
   static profileFromResponse(json: unknown): (NoonStudentProfile & { userType: string }) | null {
     const p = (json as { profile?: Record<string, unknown> } | null)?.profile;
     if (!p || p.id == null) return null;
-    // Field NAMES only (no values) — tells us whether Noon offers an Arabic name field.
-    console.info("[citadel] profile fields:", Object.keys(p).join(","));
+    CitadelIdentityProvider.logNameFields("profile", p);
     return {
       noonStudentId: String(p.id),
       displayName: CitadelIdentityProvider.officialName(p) || "طالب نون",
@@ -189,6 +206,7 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
     );
     const profile = profiles.find((p) => p.userType === "STUDENT") ?? profiles[0];
     if (!profile) throw new CitadelAuthError("No active Noon profile in token", "no_profile");
+    CitadelIdentityProvider.logNameFields("token profile", profile as unknown as Record<string, unknown>);
     return {
       noonStudentId: String(profile.id),
       displayName: CitadelIdentityProvider.officialName(profile as unknown as Record<string, unknown>) || "طالب نون",
