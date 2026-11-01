@@ -13,15 +13,15 @@ import { cn } from "@/lib/utils";
 
 export const metadata = { title: "الترتيب" };
 const TABS = [
+  { id: "cohort", label: "الجميع" },
   { id: "friends", label: "الأصدقاء" },
-  { id: "cohort", label: "الدفعة" },
   { id: "category", label: "الأقسام" },
 ] as const;
 
 export default async function LeaderboardPage({ searchParams }: { searchParams: Promise<{ tab?: string; category?: string }> }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const tab = TABS.find((t) => t.id === sp.tab)?.id ?? "friends";
+  const tab = TABS.find((t) => t.id === sp.tab)?.id ?? "cohort";
   const friends = await listFriends(user.id);
   const friendIds = friends.map((f) => f.userId);
   const tax = await getTaxonomy();
@@ -42,7 +42,7 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
     const c = await getCohortBoard(user, friendIds);
     rows = c.rows;
     note = c.authorized ? (
-      <>يظهر فقط من اختار مشاركة نتيجته.</>
+      <>يمكنك إخفاء نتيجتك من ترتيب الجميع من ملفك.</>
     ) : (
       <span className="flex items-start gap-1.5"><Lock aria-hidden className="mt-0.5 size-4 shrink-0" /> لحماية خصوصية الطلاب تظهر أسماء أصدقائك فقط. ترتيبك بين <Num value={c.size} /> طالبًا اختاروا المشاركة: {c.me ? <strong className="font-num">#{c.me.rank}</strong> : "—"}</span>
     );
@@ -95,9 +95,7 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
         )}
       </Card>
       {note && <CardHint>{note}</CardHint>}
-      <CardHint>
-        تريد الظهور لزملائك في الدفعة؟ فعّل مشاركة النتيجة من <Link href="/profile" className="text-primary-ink font-semibold">ملفك</Link>.
-      </CardHint>
+
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
 import { parseCsvDataset, parseMarkdownDataset, type SourceRow } from "./dataset";
 import { CATEGORY_DIFFICULTY, RELATION_CATEGORY, RELATION_LABEL, type RelationType } from "./mapping";
 import { lexKey, meaningKey } from "./normalize";
+import { vocalize } from "./tashkeel";
 import { summarize, validateRows } from "./validate";
 
 export const DATASET_SOURCE_LABEL = "قائمة مفردات لفظي الأولية (مرفوعة من الفريق)";
@@ -58,7 +59,7 @@ async function upsertEntry(tx: DbOrTx, lemma: string, difficulty: number) {
   const normalized = lexKey(lemma);
   const [row] = await tx
     .insert(vocabularyEntries)
-    .values({ lemma: lemma.trim(), normalized, status: "approved", difficulty })
+    .values({ lemma: vocalize(lemma.trim()), normalized, status: "approved", difficulty })
     .onConflictDoUpdate({ target: vocabularyEntries.normalized, set: { updatedAt: new Date() } })
     .returning();
   // Follow merges so a merged duplicate never comes back.
@@ -238,3 +239,26 @@ export async function lexiconStats(db: DbOrTx) {
   return { rows: Object.fromEntries(rows.map((r) => [r.s, r.n])) as Record<string, number>, words, senses, relations };
 }
 
+
+/** Apply the reviewed tashkeel to published words (display form only; idempotent). */
+export async function applyTashkeel(db: DbOrTx) {
+  const rows = await db.select({ id: vocabularyEntries.id, lemma: vocabularyEntries.lemma }).from(vocabularyEntries);
+  let updated = 0;
+  for (const r of rows) {
+    const v = vocalize(r.lemma);
+    if (v !== r.lemma) {
+      await db.update(vocabularyEntries).set({ lemma: v }).where(eq(vocabularyEntries.id, r.id));
+      updated++;
+    }
+  }
+  return updated;
+}
+
+/** Admin: set a word's displayed form (tashkeel). The letters must stay the same word. */
+export async function setLemma(db: DbOrTx, entryId: string, lemma: string) {
+  const [e] = await db.select().from(vocabularyEntries).where(eq(vocabularyEntries.id, entryId)).limit(1);
+  if (!e) throw new Error("الكلمة غير موجودة");
+  const v = lemma.normalize("NFC").trim();
+  if (lexKey(v) !== e.normalized) throw new Error("يُسمح بتعديل التشكيل فقط — الحروف يجب أن تبقى كما هي");
+  await db.update(vocabularyEntries).set({ lemma: v }).where(eq(vocabularyEntries.id, entryId));
+}

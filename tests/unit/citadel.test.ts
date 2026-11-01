@@ -64,7 +64,7 @@ describe("Citadel sign-in", () => {
     expect(m[2]).toBe(createHmac("sha256", "s3cret").update(`${m[1]}./api/oauth/token.${init.body}`).digest("hex"));
 
     expect(id).toMatchObject({ provider: "citadel", subject: "636699", role: "student" });
-    expect(id.profile).toEqual({ noonStudentId: "636699", displayName: "سارة", avatarUrl: "https://cdn/a.png", grade: null });
+    expect(id.profile).toEqual({ noonStudentId: "636699", displayName: "سارة محمد العتيبي", avatarUrl: "https://cdn/a.png", grade: null });
     expect(JSON.stringify(id.profile)).not.toMatch(/email|phone|studyatnoon/);
     expect(id.tokens?.refreshToken).toBe("r1");
     expect(id.tokens?.expiresAt!.getTime()).toBeGreaterThan(Date.now() + 590_000);
@@ -76,7 +76,7 @@ describe("Citadel sign-in", () => {
       profile: { id: 9001, name: "ليان أحمد", userType: "STUDENT", avatarUri: null, account: { email: "x@y" } },
     });
     const id = await p.authenticate(callback);
-    expect(id.profile).toMatchObject({ noonStudentId: "9001", displayName: "ليان" });
+    expect(id.profile).toMatchObject({ noonStudentId: "9001", displayName: "ليان أحمد" });
   });
 
   it("refreshes via /api/oauth/refresh with a camelCase refreshToken body", async () => {
@@ -129,5 +129,14 @@ describe("Citadel sign-in", () => {
       CitadelIdentityProvider.extractTokens({ access_token: jwt([student]), refresh_token: "r" })
         .refreshToken,
     ).toBe("r");
+  });
+});
+
+describe("official name", () => {
+  it("keeps the full name and prefers an Arabic name field when Noon sends one", async () => {
+    const { CitadelIdentityProvider } = await import("@/features/auth/providers/citadel");
+    expect(CitadelIdentityProvider.officialName({ name: "Sara  Mohammed Alotaibi" })).toBe("Sara Mohammed Alotaibi");
+    expect(CitadelIdentityProvider.officialName({ name: "Sara Alotaibi", nameAr: "سارة العتيبي" })).toBe("سارة العتيبي");
+    expect(CitadelIdentityProvider.officialName({ name: "Sara", localizedNames: { ar: "سارة محمد" } })).toBe("سارة محمد");
   });
 });

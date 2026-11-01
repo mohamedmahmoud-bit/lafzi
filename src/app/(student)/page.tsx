@@ -165,9 +165,9 @@ function FriendsCard({ d }: { d: DashboardData }) {
       {d.friends.length ? (
         <ul className="flex flex-wrap gap-3">
           {d.friends.map((f) => (
-            <li key={f.userId} className="w-14 text-center">
+            <li key={f.userId} className="w-20 text-center">
               <Avatar avatar={f.avatar} size={48} className="mx-auto" />
-              <p className="truncate text-xs">{f.name.split(" ")[0]}</p>
+              <p className="line-clamp-2 text-[0.7rem] leading-tight">{f.name}</p>
               {f.friendStreak > 0 && <p className="text-flame text-[0.7rem] font-bold"><Flame aria-hidden className="inline size-3" /> <Num value={f.friendStreak} /></p>}
             </li>
           ))}
@@ -207,12 +207,12 @@ function WeeklyBoard({ d }: { d: DashboardData }) {
             <li key={r.userId} className={cn("flex items-center gap-2 text-sm", r.isMe && "text-primary-ink font-bold")}>
               <span className="font-num w-5 text-center">{r.rank}</span>
               <Avatar avatar={r.avatar} size={28} />
-              <span className="flex-1 truncate">{r.isMe ? "أنت" : r.displayName}</span>
+              <span className="min-w-0 flex-1 truncate">{r.displayName}{r.isMe && <span className="text-muted text-xs"> (أنت)</span>}</span>
               <Xp value={r.xp} />
             </li>
           ))}
         </ol>
-        {d.board.length <= 1 && <CardHint>أضف أصحابك لتتنافسوا كل أسبوع.</CardHint>}
+        {d.board.length <= 1 && <CardHint>العب جولة لتظهر في ترتيب هذا الأسبوع.</CardHint>}
       </Card>
     </Link>
   );

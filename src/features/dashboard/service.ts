@@ -9,7 +9,7 @@ import { PLAY_GAMES } from "@/features/games/modes";
 import { isPlayable } from "@/features/games/session.service";
 import { getLevels, getXpRule } from "@/features/gamification/xp.service";
 import { levelFor } from "@/features/gamification/levels";
-import { getFriendsBoard } from "@/features/leaderboard/service";
+import { getCohortBoard } from "@/features/leaderboard/service";
 import { loadLexicon } from "@/features/lexicon/content";
 import { MISSION_MINUTES, missionProgress } from "@/features/missions/config";
 import { listFriends, myChallenges } from "@/features/social/service";
@@ -48,7 +48,9 @@ export async function getDashboard(user: CurrentUser) {
       .where(eq(studentVocabularyProgress.userId, user.id))
       .groupBy(studentVocabularyProgress.state),
   ]);
-  const board = await getFriendsBoard(user.id, friends.map((f) => f.userId));
+  const cohort = await getCohortBoard(user, friends.map((f) => f.userId));
+  const top = cohort.rows.slice(0, 5);
+  const board = cohort.me && !top.some((r) => r.isMe) ? [...top.slice(0, 4), cohort.me] : top;
   const dailyPlayable = await isPlayable("daily_challenge");
   const games = await Promise.all(PLAY_GAMES.map(async (g) => ({ id: g.id, nameAr: g.nameAr, icon: g.icon, tagline: g.tagline, playable: await isPlayable(g.id) })));
   const categories = tax.subskillsOf("vocabulary").map((c) => ({ id: c.id, nameAr: c.nameAr, words: [...lx.entries.values()].filter((e) => e.categories.includes(c.id)).length })).filter((c) => c.words > 0);
@@ -75,7 +77,8 @@ export async function getDashboard(user: CurrentUser) {
     friendCount: friends.length,
     challenges,
     board: board.slice(0, 5),
-    myRank: board.find((r) => r.isMe)?.rank ?? null,
+    myRank: cohort.me?.rank ?? null,
+    boardSize: cohort.size,
     badge,
     collection: { learned: profile.totalWordsLearned, mastered: profile.masteredWords, learning: (byState.learning ?? 0) + (byState.familiar ?? 0), total: lx.entries.size },
   };

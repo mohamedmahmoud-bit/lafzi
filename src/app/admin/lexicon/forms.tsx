@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { acceptCleanBatchAction, importDatasetAction, mergeEntriesAction } from "@/features/admin/content-actions";
+import { acceptCleanBatchAction, importDatasetAction, mergeEntriesAction, setLemmaAction } from "@/features/admin/content-actions";
 
 export function ImportDatasetForm() {
   const [s, action, pending] = useActionState(importDatasetAction, null);
@@ -61,5 +61,18 @@ export function AcceptCleanButton({ count }: { count: number }) {
       </Button>
       {msg && <p className={msg.ok ? "text-mint text-sm" : "text-rose text-sm"}>{msg.text}</p>}
     </div>
+  );
+}
+
+/** Edit a word's tashkeel (letters must stay the same). */
+export function LemmaForm({ id, lemma }: { id: string; lemma: string }) {
+  const [s, action, pending] = useActionState(setLemmaAction, null);
+  return (
+    <form action={action} className="flex items-center gap-1">
+      <input type="hidden" name="id" value={id} />
+      <input name="lemma" defaultValue={lemma} aria-label="التشكيل" className="border-border bg-surface font-display w-36 rounded-lg border px-2 py-1 text-lg" />
+      <Button size="sm" variant="ghost" disabled={pending}>حفظ التشكيل</Button>
+      {s?.message && <span className={s.ok ? "text-mint text-xs" : "text-rose text-xs"}>{s.message}</span>}
+    </form>
   );
 }

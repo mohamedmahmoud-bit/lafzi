@@ -141,14 +141,36 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
     return { accessToken, refreshToken, expiresAt };
   }
 
+  /**
+   * The student's FULL official name exactly as Noon provides it. If Noon sends an Arabic-script
+   * name in any name field (e.g. nameAr / arabicName / localized names), that one wins; we never
+   * transliterate or invent a name.
+   */
+  static officialName(p: Record<string, unknown>): string {
+    const arabic = /[\u0600-\u06FF]/;
+    const candidates: string[] = [];
+    // Strings under a "name" key, or anywhere inside a name/localized/translations object.
+    const visit = (o: Record<string, unknown>, depth: number, inName: boolean) => {
+      for (const [k, v] of Object.entries(o)) {
+        const nameKey = /name/i.test(k);
+        if (typeof v === "string" && (nameKey || inName) && v.trim()) candidates.push(v.trim());
+        else if (v && typeof v === "object" && !Array.isArray(v) && depth < 2 && (nameKey || /local|transl/i.test(k))) visit(v as Record<string, unknown>, depth + 1, true);
+      }
+    };
+    visit(p, 0, false);
+    const ar = candidates.find((c) => arabic.test(c));
+    return (ar ?? String(p.name ?? "").trim()).replace(/\s+/g, " ");
+  }
+
   /** Profile returned next to the token: { id, name, avatarUri, locale, userType, account: { email } }. */
   static profileFromResponse(json: unknown): (NoonStudentProfile & { userType: string }) | null {
     const p = (json as { profile?: Record<string, unknown> } | null)?.profile;
     if (!p || p.id == null) return null;
-    const firstName = String(p.name ?? "").trim().split(/\s+/)[0];
+    // Field NAMES only (no values) — tells us whether Noon offers an Arabic name field.
+    console.info("[citadel] profile fields:", Object.keys(p).join(","));
     return {
       noonStudentId: String(p.id),
-      displayName: firstName || "طالب نون",
+      displayName: CitadelIdentityProvider.officialName(p) || "طالب نون",
       avatarUrl: typeof p.avatarUri === "string" ? p.avatarUri : null,
       grade: null,
       userType: typeof p.userType === "string" ? p.userType : "UNKNOWN",
@@ -157,7 +179,7 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
 
   /**
    * Pick the student profile from the token. We keep only the profile id (stable Noon student id),
-   * first name and avatar — never email, phone or account details.
+   * the official full name and avatar — never email, phone or account details.
    */
   static profileFromToken(accessToken: string): NoonStudentProfile & { userType: string } {
     const claims = decodeJwt(accessToken) as CoreJwt;
@@ -167,10 +189,9 @@ export class CitadelIdentityProvider implements NoonIdentityProvider {
     );
     const profile = profiles.find((p) => p.userType === "STUDENT") ?? profiles[0];
     if (!profile) throw new CitadelAuthError("No active Noon profile in token", "no_profile");
-    const firstName = (profile.name ?? "").trim().split(/\s+/)[0];
     return {
       noonStudentId: String(profile.id),
-      displayName: firstName || "طالب نون",
+      displayName: CitadelIdentityProvider.officialName(profile as unknown as Record<string, unknown>) || "طالب نون",
       avatarUrl: profile.avatarUri ?? null,
       grade: null,
       userType: profile.userType ?? "UNKNOWN",

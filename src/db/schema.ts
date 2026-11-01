@@ -99,8 +99,8 @@ export const studentProfiles = pgTable(
     officialFullName: text("official_full_name"),
     identitySyncedAt: timestamp("identity_synced_at", { withTimezone: true }),
     avatar: text("avatar").notNull().default("owl"),
-    /** Opt-in: appear on leaderboards beyond friends. */
-    shareScores: boolean("share_scores").notNull().default(false),
+    /** Appear on the everyone/cohort leaderboard (on by default; a student can hide). */
+    shareScores: boolean("share_scores").notNull().default(true),
     /** Who can open the profile: friends | private. */
     profileVisibility: text("profile_visibility").notNull().default("friends"),
     grade: text("grade"),

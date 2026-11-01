@@ -28,6 +28,7 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
   const { upsertUserFromIdentity } = await import("@/features/auth/users");
   const { getCohortBoard, getFriendsBoard } = await import("@/features/leaderboard/service");
   const { learningDay } = await import("@/lib/time");
+  const { lexKey } = await import("@/features/lexicon/normalize");
   const md = readFileSync("data/vocabulary/lafzi-initial-427.md", "utf8");
   let a: string, b: string, c: string;
   const day = learningDay();
@@ -94,6 +95,14 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(cats.map((x) => x.categoryId).sort()).toEqual(expect.arrayContaining(["vo_animal_sound", "vo_animal_young", "vo_animal_home", "vo_animal_pair"]));
   });
 
+  it("published words carry reviewed tashkeel where it matters; letters never change", async () => {
+    const [w] = await getDb().select().from(s.vocabularyEntries).where(eq(s.vocabularyEntries.normalized, "جلد"));
+    expect(w.lemma).toBe("جَلَد");
+    await expect(lexicon.setLemma(getDb(), w.id, "جِلْد")).resolves.toBeUndefined(); // same letters → allowed
+    await expect(lexicon.setLemma(getDb(), w.id, "صبر")).rejects.toThrow();
+    await lexicon.setLemma(getDb(), w.id, "جَلَد");
+  });
+
   it("a reviewer correction is stored beside the original and used on approval", async () => {
     const [row] = await getDb().select().from(s.vocabImportRows).where(and(eq(s.vocabImportRows.word, "دب"), eq(s.vocabImportRows.related, "دببة")));
     await lexicon.editRow(getDb(), row.id, { related: "دُبّة" }, "أنثى الدب: دُبّة");
@@ -103,7 +112,8 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(after.status).toBe("accepted");
     const [rel] = await getDb().select().from(s.vocabularyRelationships).where(eq(s.vocabularyRelationships.id, after.relationshipId!));
     const [to] = await getDb().select().from(s.vocabularyEntries).where(eq(s.vocabularyEntries.id, rel.toEntryId));
-    expect(to.lemma).toBe("دُبّة");
+    expect(lexKey(to.lemma)).toBe(lexKey("دُبّة"));
+    expect(to.lemma).toMatch(/[\u064B-\u0652]/); // keeps tashkeel
   });
 
   it("opening the app or the word of the day alone does not make a streak day (needs 5 answers)", async () => {
@@ -238,13 +248,19 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(p2.avatar).toBe("falcon"); // customization untouched
   });
 
-  it("leaderboards: friends first; cohort names restricted to friends unless authorised; opt-in only", async () => {
+  it("leaderboards: everyone sees everyone by default; a student can hide; friends board stays", async () => {
     const fb = await getFriendsBoard(a, [b]);
     expect(fb.map((r) => r.userId).sort()).toEqual([a, b].sort());
     const [prof] = await getDb().select().from(s.studentProfiles).where(eq(s.studentProfiles.userId, c));
     const board = await getCohortBoard({ id: a, cohortId: prof.cohortId }, [b]);
-    expect(board.authorized).toBe(false);
-    expect(board.rows.every((r) => r.userId === a || r.userId === b)).toBe(true);
-    expect(board.rows.some((r) => r.userId === c)).toBe(false);
+    expect(board.authorized).toBe(true);
+    expect(board.rows.map((r) => r.userId).sort()).toEqual([a, b, c].sort());
+    expect(board.rows.find((r) => r.userId === b)!.displayName).toBe("فهد سالم"); // full name
+    await updateProfile(c, { shareScores: false });
+    const hidden = await getCohortBoard({ id: a, cohortId: prof.cohortId }, [b]);
+    expect(hidden.rows.some((r) => r.userId === c)).toBe(false);
+    // A student without a cohort still competes with everyone.
+    const noCohort = await getCohortBoard({ id: a, cohortId: null }, []);
+    expect(noCohort.rows.length).toBeGreaterThanOrEqual(2);
   });
 });

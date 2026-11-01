@@ -148,11 +148,11 @@ export async function getFriendsBoard(userId: string, friendIds: string[]): Prom
  */
 export async function getCohortBoard(user: { id: string; cohortId: string | null }, friendIds: string[]) {
   const week = weekRange(learningDay());
-  if (!user.cohortId) return { authorized: false, rows: [] as BoardRow[], me: null as BoardRow | null, size: 0 };
+  // Students without a cohort compete with everyone (all students are one group until Noon classes exist).
   const members = await getDb()
     .select({ userId: studentProfiles.userId, share: studentProfiles.shareScores })
     .from(studentProfiles)
-    .where(eq(studentProfiles.cohortId, user.cohortId));
+    .where(user.cohortId ? eq(studentProfiles.cohortId, user.cohortId) : undefined);
   const eligible = members.filter((m) => m.share || m.userId === user.id).map((m) => m.userId);
   const all = await weekXpFor(eligible, week.start, week.end);
   const lv = new Map(all.map((r) => [r.userId, r.level]));

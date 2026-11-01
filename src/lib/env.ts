@@ -43,10 +43,10 @@ const schema = z.object({
   NOON_PRACTICE_ALLOWED_HOSTS: z.string().default("student.noonacademy.com,student.noon.edu.sa,student.school.studyatnoon.com"),
   ANALYTICS_SINKS: z.string().default("db"),
   /**
-   * Students may be minors: full names are shown to classmates beyond friends only when the school /
-   * Noon has authorised it. Otherwise cohort boards show friends only (+ your own rank).
+   * Full names on the everyone/cohort board. Authorised by the product owner (default on);
+   * set to "false" to restrict that board to friends' names only.
    */
-  COHORT_LEADERBOARD_NAMES: bool,
+  COHORT_LEADERBOARD_NAMES: z.string().optional().transform((v) => !["false", "0", "no"].includes((v ?? "").trim().toLowerCase())),
 });
 
 export type Env = z.infer<typeof schema>;

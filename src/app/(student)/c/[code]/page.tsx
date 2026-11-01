@@ -48,7 +48,7 @@ export default async function ChallengePage({ params, searchParams }: { params: 
           )}
         </div>
         {c.bothDone ? (
-          <p className="font-display text-2xl font-bold">{tie ? "تعادل!" : winner?.isMe ? "فزت!" : `فاز ${other?.name.split(" ")[0]} — جولة انتقام؟`}</p>
+          <p className="font-display text-2xl font-bold">{tie ? "تعادل!" : winner?.isMe ? "فزت!" : `فاز ${other?.name} — جولة انتقام؟`}</p>
         ) : (
           <CardHint>تظهر النتيجة عندما ينتهي الاثنان من نفس الأسئلة.</CardHint>
         )}

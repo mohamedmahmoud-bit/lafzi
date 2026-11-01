@@ -403,3 +403,17 @@ export async function setEntryAction(form: FormData) {
   await audit({ actorUserId: admin.id, action: "lexicon.entry_update", entityType: "vocabulary_entry", entityId: id, metadata: { difficulty, status } });
   revalidatePath("/admin/lexicon");
 }
+
+export async function setLemmaAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const id = z.uuid().parse(form.get("id"));
+    const lemma = String(form.get("lemma") ?? "").slice(0, 80);
+    await lexicon.setLemma(getDb(), id, lemma);
+    await audit({ actorUserId: admin.id, action: "lexicon.set_tashkeel", entityType: "vocabulary_entry", entityId: id, metadata: { lemma } });
+    revalidatePath("/admin/lexicon");
+    return { ok: true, message: "حُفظ التشكيل" };
+  } catch (e) {
+    return fail(e);
+  }
+}

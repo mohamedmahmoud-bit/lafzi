@@ -17,7 +17,7 @@ export function PrivacyForm({ shareScores, visibility }: { shareScores: boolean;
     <div className="mt-2 space-y-3 text-sm">
       <label className="flex items-start gap-3">
         <input type="checkbox" className="mt-1 size-5" checked={share} disabled={pending} onChange={(e) => { setShare(e.target.checked); save({ shareScores: e.target.checked }); }} />
-        <span><strong>أظهر نتيجتي في ترتيب الدفعة</strong><span className="text-muted block">مغلق افتراضيًا. أصدقاؤك يرون نتيجتك دائمًا.</span></span>
+        <span><strong>أظهر اسمي ونتيجتي في ترتيب الجميع</strong><span className="text-muted block">أوقفه إن أردت أن يراك أصدقاؤك فقط.</span></span>
       </label>
       <label className="flex items-center justify-between gap-3">
         <span><strong>من يرى ملفي</strong></span>

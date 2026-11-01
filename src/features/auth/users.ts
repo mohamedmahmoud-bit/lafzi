@@ -9,7 +9,7 @@ import type { NoonIdentity } from "./providers/types";
 export async function upsertUserFromIdentity(identity: NoonIdentity): Promise<string> {
   const db = getDb();
   return db.transaction(async (tx) => {
-    const displayName = sanitizeText(identity.profile.displayName, 60) || "طالب";
+    const displayName = sanitizeText(identity.profile.displayName, 120) || "طالب";
     const [existing] = await tx
       .select({ id: users.id })
       .from(users)

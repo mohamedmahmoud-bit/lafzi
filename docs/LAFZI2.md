@@ -60,7 +60,7 @@ auditable ledger with daily caps; random guessing earns little (accuracy multipl
   Codes are random, contain no personal data. No private messaging.
 - Block (also removes friendship) and report (reviewed by staff).
 - Leaderboards: **friends** (default), **cohort** (only students who opted in; full names of
-  non-friends only when `COHORT_LEADERBOARD_NAMES=true` is authorised — otherwise the audience is
+  non-friends unless `COHORT_LEADERBOARD_NAMES=false` (authorised by the owner, on by default) — then the audience is
   restricted to friends and the student sees just their own rank), **category** (friends).
 - Profile visibility: friends / private. Score sharing is off by default.
 

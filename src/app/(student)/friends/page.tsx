@@ -87,7 +87,7 @@ export default async function FriendsPage({ searchParams }: { searchParams: Prom
                 <a href={`/c/${c.code}`} className="hover:bg-surface-muted flex items-center gap-2 rounded-xl px-2 py-2 text-sm">
                   <Swords aria-hidden className="text-grape size-4" />
                   <span className="flex-1 font-semibold">{c.gameName}</span>
-                  <span className="text-muted text-xs">{c.players.map((p) => (p.isMe ? "أنت" : p.name.split(" ")[0])).join(" × ")}</span>
+                  <span className="text-muted text-xs">{c.players.map((p) => (p.isMe ? "أنت" : p.name)).join(" × ")}</span>
                 </a>
               </li>
             ))}

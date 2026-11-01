@@ -87,6 +87,7 @@ async function main() {
   const staged = await stageInitialDataset(db);
   const { acceptAllClean } = await import("../features/lexicon/service");
   const accepted = staged ? await acceptAllClean(db, null, staged.batch.id) : 0;
+  await (await import("../features/lexicon/service")).applyTashkeel(db);
   console.log(`  vocabulary: ${staged?.batch.rowCount ?? 0} rows staged, ${accepted} clean rows approved (dev), flagged rows left for review`);
   await seedDevStudyExamples(db);
 

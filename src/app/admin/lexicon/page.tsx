@@ -11,7 +11,7 @@ import { getTaxonomy } from "@/features/curriculum/service";
 import { RELATION_TEXT, type RelationType } from "@/features/lexicon/mapping";
 import { lexiconStats } from "@/features/lexicon/service";
 import { cn } from "@/lib/utils";
-import { AcceptCleanButton, ImportDatasetForm, MergeForm } from "./forms";
+import { AcceptCleanButton, ImportDatasetForm, LemmaForm, MergeForm } from "./forms";
 
 export const metadata = { title: "مكتبة الكلمات" };
 export const maxDuration = 300;
@@ -190,7 +190,7 @@ export default async function LexiconAdmin({ searchParams }: { searchParams: Pro
             <li key={e.id}>
               <Card className="space-y-1 p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-display text-xl font-bold">{e.lemma}</span>
+                  <LemmaForm id={e.id} lemma={e.lemma} />
                   {e.status === "suspended" && <Pill tone="danger">موقوفة</Pill>}
                   {ec.filter((c) => c.entryId === e.id).map((c) => <Pill key={c.categoryId}>{catName.get(c.categoryId) ?? c.categoryId}</Pill>)}
                   <form action={setEntryAction} className="ms-auto flex items-center gap-1">
