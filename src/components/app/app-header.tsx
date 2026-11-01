@@ -40,7 +40,7 @@ export function AppHeader({
           </span>
           <span
             className="bg-xp-soft text-xp hidden rounded-full px-2.5 py-1 text-sm font-bold sm:inline"
-            title="مجموع النقاط"
+            title="مجموع نقاطك منذ البداية (الترتيب الأسبوعي يحسب نقاط هذا الأسبوع فقط)"
           >
             <Xp value={xp} />
           </span>

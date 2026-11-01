@@ -203,6 +203,7 @@ function WeeklyBoard({ d }: { d: DashboardData }) {
           <CardTitle className="flex-1">ترتيب الأسبوع</CardTitle>
           {d.myRank && <span className="font-num text-sm font-bold">#{d.myRank}</span>}
         </div>
+        <p className="text-muted -mt-1 text-xs">نقاط هذا الأسبوع فقط · يبدأ الجميع من الصفر كل أحد</p>
         <ol className="space-y-1.5">
           {d.board.map((r) => (
             <li key={r.userId} className={cn("flex items-center gap-2 text-sm", r.isMe && "text-primary-ink font-bold")}>
@@ -214,6 +215,9 @@ function WeeklyBoard({ d }: { d: DashboardData }) {
           ))}
         </ol>
         {d.board.length <= 1 && <CardHint>العب جولة لتظهر في ترتيب هذا الأسبوع.</CardHint>}
+        {d.board.some((r) => r.isMe && r.xp === 0) && d.xpTotal > 0 && (
+          <CardHint>مجموع نقاطك <Num value={d.xpTotal} /> XP محفوظ. أسبوع جديد بدأ — العب جولة لتصعد في ترتيبه.</CardHint>
+        )}
       </Card>
     </Link>
   );
