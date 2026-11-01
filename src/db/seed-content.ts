@@ -16,6 +16,9 @@ async function main() {
   if (staged) console.log(`  vocabulary dataset: ${staged.created ? "staged" : "already staged"} (${staged.batch.rowCount} rows, awaiting review)`);
   const { applyTashkeel } = await import("../features/lexicon/service");
   console.log(`  tashkeel applied to ${await applyTashkeel(db)} word(s)`);
+  const { refreshBankWords } = await import("../features/bank-words/service");
+  const bw = await refreshBankWords(db);
+  console.log(`  bank word candidates: ${bw.candidates} from ${bw.questions} bank questions`);
 
   // New students join the first cohort (until Noon exposes class/program membership).
   const [{ n }] = (await db.execute(sql`select count(*)::int as n from cohorts`)).rows as { n: number }[];

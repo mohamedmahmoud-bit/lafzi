@@ -24,6 +24,8 @@ import type { NoonQuestionDTO } from "@/features/question-bank/types";
 import { runQuestionBankSync } from "@/features/question-bank/run-sync";
 import { isResourceType } from "@/features/study/providers";
 import * as lexicon from "@/features/lexicon/service";
+import * as teacherQ from "@/features/questions/service";
+import * as bankWords from "@/features/bank-words/service";
 import { approveCorroborated, approveMeaning, decideEntry, decideRelationship, runVocabularyExtraction } from "@/features/word-bank/service";
 import { isProduction } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -106,6 +108,7 @@ export async function finishImportAction(runId: string, p: { chapters: number[];
       complete: p.complete === true,
     });
     await audit({ actorUserId: admin.id, action: "question_bank.import_finish", entityType: "question_sync_run", entityId: runId, metadata: run.stats });
+    await bankWords.refreshBankWords(getDb());
     revalidatePath("/admin/question-bank");
     return { status: run.status, stats: run.stats };
   });
@@ -416,4 +419,83 @@ export async function setLemmaAction(_prev: ActionState, form: FormData): Promis
   } catch (e) {
     return fail(e);
   }
+}
+
+// ─── Teacher question sets ──────────────────────────────────────────────────
+
+export async function importQuestionsAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size) throw new Error("اختر ملفًا");
+    if (file.size > 3_000_000) throw new Error("الملف كبير جدًا");
+    const text = await file.text();
+    const format = file.name.toLowerCase().endsWith(".csv") ? "csv" : "markdown";
+    const { set, created } = await teacherQ.importQuestionSet(getDb(), { text, sourceName: file.name.slice(0, 120), format, createdBy: admin.id });
+    await audit({ actorUserId: admin.id, action: "questions.import", entityType: "question_set", entityId: set.id, metadata: { created, rows: set.rowCount } });
+    revalidatePath("/admin/questions");
+    const st = set.stats as Record<string, number>;
+    return { ok: true, message: created ? `استُورد ${set.rowCount} سؤالًا: ${st.clean ?? 0} سليمة و${st.flagged ?? 0} فيها أخطاء.` : "هذا الملف مستورد من قبل." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function teacherQuestionDecisionAction(form: FormData) {
+  const admin = await assertAdmin();
+  const id = z.uuid().parse(form.get("id"));
+  const decision = z.enum(["accepted", "rejected"]).parse(form.get("decision"));
+  await teacherQ.decideQuestion(getDb(), id, decision, admin.id);
+  await audit({ actorUserId: admin.id, action: `questions.${decision}`, entityType: "teacher_question", entityId: id });
+  revalidatePath("/admin/questions");
+}
+
+export async function acceptCleanQuestionsAction() {
+  const admin = await assertAdmin();
+  const n = await teacherQ.acceptCleanQuestions(getDb(), admin.id, 2000);
+  await audit({ actorUserId: admin.id, action: "questions.bulk_accept_clean", metadata: { count: n } });
+  revalidatePath("/admin/questions");
+}
+
+// ─── Words extracted from the Noon bank ─────────────────────────────────────
+
+export async function refreshBankWordsAction(): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const r = await bankWords.refreshBankWords(getDb());
+    await audit({ actorUserId: admin.id, action: "bank_words.refresh", metadata: r });
+    revalidatePath("/admin/lexicon");
+    return { ok: true, message: `فُحص ${r.questions} سؤالًا وقطعة — ${r.candidates} كلمة مرشحة.` };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function approveBankWordAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const id = z.uuid().parse(form.get("id"));
+    const meaning = sanitizeText(String(form.get("meaning") ?? ""), 200);
+    await bankWords.approveBankWord(getDb(), {
+      id,
+      lemma: sanitizeText(String(form.get("lemma") ?? ""), 60) || undefined,
+      meaning,
+      example: sanitizeText(String(form.get("example") ?? ""), 200) || null,
+      categoryId: String(form.get("categoryId") ?? "") || null,
+      reviewerId: admin.id,
+    });
+    await audit({ actorUserId: admin.id, action: "bank_words.approve", entityType: "bank_word_candidate", entityId: id });
+    revalidatePath("/admin/lexicon");
+    return { ok: true, message: "اعتُمدت الكلمة" };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function rejectBankWordAction(form: FormData) {
+  const admin = await assertAdmin();
+  const ids = form.getAll("id").map((v) => z.uuid().parse(v));
+  await bankWords.rejectBankWords(getDb(), ids);
+  await audit({ actorUserId: admin.id, action: "bank_words.reject", metadata: { count: ids.length } });
+  revalidatePath("/admin/lexicon");
 }

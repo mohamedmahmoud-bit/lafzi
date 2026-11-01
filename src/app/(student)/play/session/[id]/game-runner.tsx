@@ -188,7 +188,7 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
       >
         {flash === "ok" && <Confetti count={10} />}
         <p className="text-muted text-center text-sm font-semibold">{r.prompt ?? "اختر الإجابة الصحيحة"}</p>
-        {r.kind !== "odd" && <p className="font-display text-center text-4xl leading-tight font-bold">{r.stem}</p>}
+        {r.kind !== "odd" && <p className={cn("font-display text-center leading-snug font-bold", r.stem.length > 28 ? "text-2xl" : "text-4xl")}>{r.stem}</p>}
         <ChoiceList name={r.prompt ?? r.stem} choices={r.choices} selected={r.answered?.choiceId ?? selected} correctId={r.answered?.correctId ?? null} removedId={r.hintRemoved} disabled={busy || pending} onSelect={onSelect} cols={r.choices.some((c) => c.text.length > 18) ? 1 : 2} />
         {!race && !r.answered && r.choices.length > 3 && (
           <Button variant="ghost" size="sm" onClick={onHint} disabled={busy || !!r.hintRemoved}>

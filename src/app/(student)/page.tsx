@@ -11,6 +11,7 @@ import { analytics } from "@/features/analytics/analytics";
 import { requireUser } from "@/features/auth/dal";
 import { getDashboard, type DashboardData } from "@/features/dashboard/service";
 import { startGameAction } from "@/features/games/actions";
+import { categoryHref } from "@/features/games/links";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "الرئيسية" };
@@ -100,7 +101,7 @@ function TodayChallenge({ d }: { d: DashboardData }) {
             </form>
           )
         )}
-        {!d.daily.playable && <CardHint>تحدي اليوم يظهر بعد اعتماد أول دفعة من الكلمات.</CardHint>}
+        {!d.daily.playable && <CardHint>تحدي اليوم يظهر بعد اعتماد الكلمات أو أسئلة المعلم.</CardHint>}
       </div>
     </Card>
   );
@@ -144,7 +145,7 @@ function Categories({ d }: { d: DashboardData }) {
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {d.categories.map((c, i) => (
           <li key={c.id}>
-            <Link href={`/play/meaning_hunter?category=${c.id}`} className={cn("block rounded-2xl p-3 transition active:scale-[0.98]", CAT_TONES[i % CAT_TONES.length])}>
+            <Link href={categoryHref(c.id)} className={cn("block rounded-2xl p-3 transition active:scale-[0.98]", CAT_TONES[i % CAT_TONES.length])}>
               <p className="font-bold">{c.nameAr}</p>
               <p className="text-muted text-xs"><Num value={c.words} /> كلمة</p>
             </Link>

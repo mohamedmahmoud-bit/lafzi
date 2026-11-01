@@ -80,7 +80,8 @@ describe.skipIf(!TEST_URL)("platform integrity (Postgres)", async () => {
   });
 
   it("games fail closed when nothing is published or approved", async () => {
-    await expect(games.startGame(userId, "relations_hunter", { timed: false })).rejects.toMatchObject({ code: "content_unavailable" });
+    // Direct Noon-question games are retired for students (status not live) — and still fail closed.
+    await expect(games.startGame(userId, "relations_hunter", { timed: false })).rejects.toMatchObject({ code: "not_live" });
     await expect(games.startGame(userId, "meaning_hunter")).rejects.toMatchObject({ code: "content_unavailable" });
     expect((await wod.getVocabWod(userId)).status).toBe("unavailable");
   });

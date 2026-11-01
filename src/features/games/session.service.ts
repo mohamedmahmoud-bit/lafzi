@@ -31,7 +31,8 @@ import { hashString, seededRandom, shuffle } from "@/lib/utils";
 import { eliminationHint, MAX_ROUNDS, MIN_ROUNDS, pickRounds, scoreRound, TIMED_ROUND_MS, updateMastery } from "./engine";
 import { gameById, type GameDef } from "./modes";
 import type { ClientRound, GameSummary, Round, SubskillResult } from "./types";
-import { boardRounds, categoryRounds, meaningRounds, mixedRounds, oddOneOutRound, playableTypes, relationForCategory } from "./vocab-builders";
+import { boardRounds, playableTypes, relationForCategory } from "./vocab-builders";
+import { publishedTeacherQuestions, type TeacherQuestion } from "@/features/questions/service";
 
 export class GameError extends Error {
   constructor(public code: "unknown_game" | "not_live" | "content_unavailable" | "not_found" | "not_in_progress" | "bad_round" | "incomplete" | "answered" | "time_up") {
@@ -68,6 +69,15 @@ async function studentWords(userId: string) {
   return { due, known };
 }
 
+/** Teacher questions this student saw in the last week (avoid repeats while enough remain). */
+async function recentTeacherQuestions(userId: string) {
+  const rows = await getDb()
+    .select({ rounds: gameSessions.rounds })
+    .from(gameSessions)
+    .where(and(eq(gameSessions.userId, userId), gte(gameSessions.day, addDays(learningDay(), -7))));
+  return rows.flatMap((r) => (r.rounds as { teacherQuestionId?: string }[]).map((x) => x.teacherQuestionId).filter((x): x is string => !!x));
+}
+
 async function recentlyAnswered(userId: string) {
   const since = addDays(learningDay(), -REPEAT_WINDOW_DAYS);
   const rows = await getDb()
@@ -100,47 +110,74 @@ async function buildQuestionRounds(userId: string, gameId: string, topicId: stri
   }));
 }
 
-export type BuildOptions = { category?: string; relationType?: RelationType; preferEntries?: string[]; skipEntries?: string[] };
+export type BuildOptions = { category?: string; relationType?: RelationType; preferEntries?: string[]; skipEntries?: string[]; recentQuestions?: string[] };
 
-/** Build a vocabulary game's rounds from the approved lexicon (pure given lexicon + rand). */
-export function buildLexiconRounds(g: GameDef, lx: Lexicon, rand: () => number, o: BuildOptions = {}): Round[] {
+/** What the vocabulary games may use: approved word pairs (boards) and teacher-written questions. */
+export type GameContent = { lx: Lexicon; questions: TeacherQuestion[] };
+
+export async function loadGameContent(): Promise<GameContent> {
+  const db = getDb();
+  const [lx, questions] = [await loadLexicon(db, { isProduction: isProduction() }), await publishedTeacherQuestions(db)];
+  return { lx, questions };
+}
+
+/** Teacher questions exactly as written (stem, options, answer, explanation) — never generated. */
+function teacherRounds(questions: TeacherQuestion[], p: { n: number; rand: () => number; category?: string; recent?: string[] }): Round[] {
+  let pool = questions.filter((q) => !p.category || q.categoryId === p.category);
+  const recent = new Set(p.recent ?? []);
+  const fresh = pool.filter((q) => !recent.has(q.id));
+  if (fresh.length >= Math.min(p.n, MIN_ROUNDS)) pool = fresh;
+  return shuffle(pool, p.rand)
+    .slice(0, p.n)
+    .map((q) => ({
+      kind: "teacher" as const,
+      teacherQuestionId: q.id,
+      questionId: null,
+      versionId: null,
+      noonQuestionId: null,
+      subskillId: q.categoryId,
+      difficulty: q.difficulty,
+      stem: q.stem,
+      passage: null,
+      choices: q.choices,
+      correctId: q.correctId,
+      explanation: q.explanation,
+      hintRemoved: null,
+    }));
+}
+
+function board(lx: Lexicon, mechanic: "match" | "memory", rand: () => number, o: BuildOptions): Round[] {
+  const size = mechanic === "match" ? BOARD_SIZE : MEMORY_PAIRS;
+  const types = playableTypes(lx, size, rand);
+  const wanted = o.relationType ?? (o.category ? relationForCategory(o.category) ?? undefined : undefined);
+  if (wanted && !types.includes(wanted)) return [];
+  const type = wanted ?? shuffle(types, rand)[0];
+  return type ? boardRounds(lx, type, size, rand, mechanic) : [];
+}
+
+/**
+ * Build a vocabulary game's rounds. Multiple-choice games use ONLY teacher-written questions;
+ * boards pair approved words (no question text is composed).
+ */
+export function buildLexiconRounds(g: GameDef, c: GameContent, rand: () => number, o: BuildOptions = {}): Round[] {
   switch (g.mechanic) {
-    // Without a category the games aim at Qudurat-level words (hardness ≥ 2) and skip known words.
     case "mcq":
-      if (g.id === "daily_challenge") return mixedRounds(lx, { n: 10, rand, minHardness: 2 });
-      return o.category
-        ? categoryRounds(lx, { category: o.category, n: 8, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries })
-        : meaningRounds(lx, { n: 8, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries, minHardness: 3 });
-    case "race":
-      return o.category
-        ? categoryRounds(lx, { category: o.category, n: 20, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries })
-        : mixedRounds(lx, { n: 20, rand, preferEntries: o.preferEntries, skipEntries: o.skipEntries, minHardness: 2 });
-    case "odd": {
-      const out: Round[] = [];
-      const seen = new Set<string>();
-      for (let i = 0; i < 30 && out.length < 6; i++) {
-        const r = oddOneOutRound(lx, rand);
-        const key = r ? [...r.choices.map((c) => c.id)].sort().join() : "";
-        if (r && !seen.has(key)) {
-          seen.add(key);
-          out.push(r);
-        }
+      if (g.id === "daily_challenge") {
+        const qs = teacherRounds(c.questions, { n: 10, rand });
+        return qs.length >= 10 ? qs : board(c.lx, "match", rand, {});
       }
-      return out;
-    }
+      return teacherRounds(c.questions, { n: 8, rand, category: o.category, recent: o.recentQuestions });
+    case "race":
+      return teacherRounds(c.questions, { n: 20, rand, category: o.category, recent: o.recentQuestions });
+    case "odd":
+      return [];
     case "match":
-    case "memory": {
-      const size = g.mechanic === "match" ? BOARD_SIZE : MEMORY_PAIRS;
-      const types = playableTypes(lx, size, rand);
-      const wanted = o.relationType ?? (o.category ? relationForCategory(o.category) ?? undefined : undefined);
-      if (wanted && !types.includes(wanted)) return [];
-      const type = wanted ?? shuffle(types, rand)[0];
-      return type ? boardRounds(lx, type, size, rand, g.mechanic) : [];
-    }
+    case "memory":
+      return board(c.lx, g.mechanic, rand, o);
   }
 }
 
-const minRoundsFor = (g: GameDef) => (g.mechanic === "match" ? BOARD_SIZE : g.mechanic === "memory" ? MEMORY_PAIRS : g.mechanic === "odd" ? 3 : MIN_ROUNDS);
+const minRoundsFor = (g: GameDef) => (g.mechanic === "match" ? BOARD_SIZE : g.mechanic === "memory" ? MEMORY_PAIRS : g.id === "daily_challenge" ? BOARD_SIZE : MIN_ROUNDS);
 
 /** How many rounds a game could serve right now (for "content unavailable" states). */
 export async function availableRounds(gameId: string) {
@@ -149,8 +186,7 @@ export async function availableRounds(gameId: string) {
   if (g.source === "question_bank") {
     return (await publishedQuestions(getDb(), { topicId: g.topicId, gameMode: g.id, limit: MAX_ROUNDS, isProduction: isProduction() })).length;
   }
-  const lx = await loadLexicon(getDb(), { isProduction: isProduction() });
-  return buildLexiconRounds(g, lx, seededRandom(7)).length;
+  return buildLexiconRounds(g, await loadGameContent(), seededRandom(7)).length;
 }
 export const isPlayable = async (gameId: string) => {
   const g = gameById(gameId);
@@ -210,11 +246,11 @@ export async function startGame(userId: string, gameId: string, opts: { timed?: 
   if (g.source === "question_bank") {
     rounds = await buildQuestionRounds(userId, gameId, g.topicId, seededRandom(hashString(`${userId}:${gameId}:${Date.now()}`)));
   } else {
-    const lx = await loadLexicon(db, { isProduction: isProduction() });
+    const content = await loadGameContent();
     // Daily challenge: the same set for every student today (fair to compare with friends).
     const seed = g.id === "daily_challenge" ? hashString(`daily:${day}`) : hashString(`${userId}:${gameId}:${Date.now()}`);
     const words = g.id === "daily_challenge" ? { due: undefined, known: undefined } : await studentWords(userId);
-    rounds = buildLexiconRounds(g, lx, seededRandom(seed), { ...opts, preferEntries: words.due, skipEntries: words.known });
+    rounds = buildLexiconRounds(g, content, seededRandom(seed), { ...opts, preferEntries: words.due, skipEntries: words.known, recentQuestions: g.id === "daily_challenge" ? undefined : await recentTeacherQuestions(userId) });
   }
   if (rounds.length < minRoundsFor(g)) throw new GameError("content_unavailable");
   const id = await insertSession(userId, g, rounds, { timed: !!opts.timed, kind: g.id === "daily_challenge" ? "daily" : "normal", categoryId });

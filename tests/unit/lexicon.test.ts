@@ -4,7 +4,10 @@ import { parseCsvDataset, parseMarkdownDataset } from "@/features/lexicon/datase
 import { lexKey } from "@/features/lexicon/normalize";
 import { summarize, validateRows } from "@/features/lexicon/validate";
 import type { Lexicon } from "@/features/lexicon/content";
-import { boardRounds, categoryRounds, hardness, letterSimilarity, meaningRounds, sharesKeyWord, oddOneOutRound, relationRound, unambiguousSet } from "@/features/games/vocab-builders";
+import { boardRounds, relationForCategory, unambiguousSet } from "@/features/games/vocab-builders";
+import { answerIndex, parseQuestionCsv, parseQuestionMarkdown } from "@/features/questions/parse";
+import { validateQuestions } from "@/features/questions/service";
+import { extractCandidates, wordsOf } from "@/features/bank-words/extract";
 import { profileUpdateSchema } from "@/features/profile/service";
 import { seededRandom } from "@/lib/utils";
 
@@ -80,7 +83,7 @@ function lexicon(): Lexicon {
   };
 }
 
-describe("game builders use approved content only and avoid ambiguity", () => {
+describe("word-pair boards use approved pairs only and avoid ambiguity", () => {
   it("never puts two lefts on a board that share a right (جحر fits الأرنب/الفأر/الأفعى)", () => {
     for (let seed = 1; seed < 40; seed++) {
       const set = unambiguousSet(lexicon(), "animal_home", 3, seededRandom(seed));
@@ -97,84 +100,9 @@ describe("game builders use approved content only and avoid ambiguity", () => {
       expect(lx.relations.some((x) => x.type === "sound" && x.toId === r.correctId && lx.entries.get(x.fromId)!.lemma === r.stem)).toBe(true);
     }
   });
-  it("relation question distractors are never valid answers for the word", () => {
-    const lx = lexicon();
-    for (const rel of lx.relations.filter((r) => r.type === "animal_home")) {
-      const q = relationRound(lx, rel, seededRandom(5));
-      if (!q) continue;
-      const valid = new Set(lx.relations.filter((r) => r.type === "animal_home" && r.fromId === rel.fromId).map((r) => r.toId));
-      expect(q.choices.filter((c) => valid.has(c.id))).toHaveLength(1);
-    }
-  });
-  it("meaning rounds never use a synonym's meaning as a distractor", () => {
-    const lx = lexicon();
-    lx.senses.push({ id: "sx", entryId: [...lx.entries.values()].find((e) => e.lemma === "فرح")!.id, meaning: "مبتهج", example: null, difficulty: 2 });
-    for (let seed = 1; seed < 20; seed++) {
-      for (const r of meaningRounds(lx, { n: 6, rand: seededRandom(seed) })) {
-        if (r.stem === "سعيد") expect(r.choices.map((c) => c.text)).not.toContain("مبتهج");
-      }
-    }
-  });
-  it("odd-one-out: the outlier belongs to another group and explains itself", () => {
-    const r = oddOneOutRound(lexicon(), seededRandom(9))!;
-    expect(r).toBeTruthy();
-    expect(r.choices).toHaveLength(4);
-    expect(r.explanation).toContain(r.choices.find((c) => c.id === r.correctId)!.text);
-  });
 });
 
-describe("harder, fair questions", () => {
-  it("a wrong option never shares a key word with the right meaning (no two right answers)", () => {
-    expect(sharesKeyWord("ضعف، وهن", "ضعف، خور")).toBe(true);
-    expect(sharesKeyWord("توبيخ ولوم", "المصائب والشدائد")).toBe(false);
-    const lx = lexicon();
-    lx.senses.push({ id: "w1", entryId: [...lx.entries.values()].find((e) => e.lemma === "كئيب")!.id, meaning: "حزين النفس", example: null, difficulty: 2 });
-    for (let seed = 1; seed < 30; seed++) {
-      for (const r of meaningRounds(lx, { n: 6, rand: seededRandom(seed) })) {
-        const right = r.choices.find((c) => c.id === r.correctId)!.text;
-        for (const c of r.choices) if (c.id !== r.correctId) expect(sharesKeyWord(right, c.text)).toBe(false);
-      }
-    }
-  });
-  it("everyday words count as easy; look-alike answers rank as traps", () => {
-    const lx = lexicon();
-    const id = (w: string) => [...lx.entries.values()].find((e) => e.lemma === w)!.id;
-    lx.entries.get(id("سعيد"))!.categories = ["vo_synonym", "vo_antonym"];
-    lx.entries.get(id("شجاع"))!.categories = ["vo_qudurat"];
-    expect(hardness(lx, id("سعيد"))).toBe(1);
-    expect(hardness(lx, id("شجاع"))).toBe(3);
-    expect(letterSimilarity("نهيق", "نعيق")).toBeGreaterThan(letterSimilarity("نهيق", "زئير"));
-  });
-  it("the default game prefers hard words when enough exist", () => {
-    const lx = lexicon();
-    for (const e of lx.entries.values()) e.categories = ["vo_qudurat"];
-    const easy = [...lx.entries.values()].find((e) => e.lemma === "سعيد")!;
-    easy.categories = ["vo_antonym"];
-    const rounds = meaningRounds(lx, { n: 3, rand: seededRandom(4), minHardness: 3 });
-    expect(rounds.some((r) => r.stem === "سعيد")).toBe(false);
-  });
-});
 
-describe("category practice", () => {
-  it("a relation category asks only about that relation", () => {
-    const lx = lexicon();
-    for (let seed = 1; seed < 15; seed++) {
-      const rounds = categoryRounds(lx, { category: "vo_animal_sound", n: 8, rand: seededRandom(seed) });
-      expect(rounds.length).toBeGreaterThan(0);
-      for (const r of rounds) {
-        expect(r.kind).toBe("relation");
-        expect(r.subskillId).toBe("vo_animal_sound");
-        expect(r.prompt).toContain("صوت");
-      }
-    }
-  });
-  it("animal homes stay homes, never meanings or other relations", () => {
-    for (const r of categoryRounds(lexicon(), { category: "vo_animal_home", n: 8, rand: seededRandom(2) })) {
-      expect(r.subskillId).toBe("vo_animal_home");
-      expect(r.prompt).toContain("يسكن");
-    }
-  });
-});
 
 describe("profile updates", () => {
   it("accept avatar/privacy and reject any name field", () => {
@@ -182,5 +110,58 @@ describe("profile updates", () => {
     expect(profileUpdateSchema.safeParse({ displayName: "أي اسم" }).success).toBe(false);
     expect(profileUpdateSchema.safeParse({ officialFullName: "x" }).success).toBe(false);
     expect(profileUpdateSchema.safeParse({ avatar: "https://evil/x.png" }).success).toBe(false);
+  });
+});
+
+describe("teacher questions (the only multiple-choice source)", () => {
+  const md = `## مفردات القدرات
+| السؤال | أ | ب | ج | د | الإجابة | الشرح |
+|---|---|---|---|---|---|---|
+| ما معنى «الدَّيْجُور»؟ | شدة الظلام | ضوء الفجر | الريح | المطر | أ | الظلام الشديد |
+| ما ضد «جبان»؟ | خائف | شجاع | ضعيف | — | شجاع | — |
+| سؤال بلا إجابة | س | ص | — | — | — | — |
+| سؤال مكرر | س | ص | — | — | ب | — |
+| سؤال مكرر | س | ص | — | — | ب | — |`;
+  it("keeps the teacher's text, resolves letter or text answers, and takes the section from the heading", () => {
+    const rows = parseQuestionMarkdown(md);
+    expect(rows).toHaveLength(5);
+    expect(rows[0].stem).toBe("ما معنى «الدَّيْجُور»؟");
+    expect(rows[0].section).toBe("مفردات القدرات");
+    expect(answerIndex("أ", rows[0].options)).toBe(0);
+    expect(answerIndex("شجاع", rows[1].options)).toBe(1);
+    expect(answerIndex("2", ["x", "y"])).toBe(1);
+  });
+  it("flags missing answers and duplicates; never invents anything", () => {
+    const v = validateQuestions(parseQuestionMarkdown(md), (s) => (s === "مفردات القدرات" ? "vo_qudurat" : null));
+    expect(v[0].status).toBe("staged");
+    expect(v[0].correctId).toBe("أ");
+    expect(v[0].categoryId).toBe("vo_qudurat");
+    expect(v[1].choices).toHaveLength(3); // the «—» option is dropped, nothing added
+    expect(v[2].flags.map((f) => f.code)).toContain("missing_answer");
+    expect(v[4].flags.map((f) => f.code)).toContain("duplicate_question");
+  });
+  it("reads CSV", () => {
+    const rows = parseQuestionCsv('السؤال,أ,ب,الإجابة,القسم\n"ما معنى «وَجَم»، باختصار؟",سكت حزنًا,ضحك,أ,مفردات القدرات\n');
+    expect(rows[0].stem).toBe("ما معنى «وَجَم»، باختصار؟");
+    expect(rows[0].options).toEqual(["سكت حزنًا", "ضحك"]);
+  });
+  it("relation categories practise with boards", () => {
+    expect(relationForCategory("vo_animal_sound")).toBe("sound");
+    expect(relationForCategory("vo_qudurat")).toBeNull();
+  });
+});
+
+describe("words from the bank", () => {
+  it("prefers rare question-target words and skips function words", () => {
+    expect(wordsOf("هو في البيت")).toEqual(["البيت"]);
+    const texts = [
+      { noonQuestionId: 1, topic: "verbal_analogy", stem: "أتراح : أفراح", choices: ["أجداث : قبور", "شمس : قمر"], passage: null },
+      ...Array.from({ length: 10 }, (_, i) => ({ noonQuestionId: 100 + i, topic: null, stem: "الشمس تشرق في الصباح", choices: [], passage: null })),
+    ];
+    const c = extractCandidates(texts, new Set());
+    const lemmas = c.map((x) => x.lemma);
+    expect(lemmas.slice(0, 4)).toEqual(expect.arrayContaining(["أتراح", "أجداث"]));
+    expect(lemmas).not.toContain("الشمس"); // frequent everyday word
+    expect(lemmas).not.toContain("في");
   });
 });

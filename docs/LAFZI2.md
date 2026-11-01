@@ -70,3 +70,10 @@ auditable ledger with daily caps; random guessing earns little (accuracy multipl
   trigger rejects any change outside the sync transaction; the profile API accepts only
   `avatar`, `shareScores`, `profileVisibility` (`.strict()`), and rejects any name field.
 - Avatars: 18 curated originals; changing one never affects XP, badges or streaks.
+
+## Content sources (no composed questions)
+
+- **Multiple-choice games** (صائد المعاني، سباق الكلمات، تحدي اليوم) use only teacher-written questions imported at `/admin/questions` (Markdown table or CSV: السؤال، أ، ب، ج، د، الإجابة، الشرح، القسم، الصعوبة). Rows are validated, then a reviewer approves them; nothing is generated.
+- **Boards** (وصلها صح، ذاكرة لفظي) only pair approved words with their approved counterpart.
+- **Bank words**: words extracted from Noon bank question stems, choices and passages appear in `/admin/lexicon` → «مفردات بنك نون». A reviewer writes the meaning (and may fix the base form) before a word is published. Noon questions themselves are not shown to students.
+- **Word of the Day** is a flashcard: recall → reveal → rate yourself.

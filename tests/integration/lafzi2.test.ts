@@ -30,6 +30,20 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
   const { learningDay } = await import("@/lib/time");
   const { lexKey } = await import("@/features/lexicon/normalize");
   const md = readFileSync("data/vocabulary/lafzi-initial-427.md", "utf8");
+  const questionsMod = await import("@/features/questions/service");
+  // Test fixture standing in for a teacher's question file (placeholder text, not real content).
+  const qRow = (i: number) => `| سؤال تجريبي ${i} | خيار أ${i} | خيار ب${i} | خيار ج${i} | خيار د${i} | ${"أبجد"[i % 4]} | شرح ${i} |`;
+  const teacherFile = [
+    "## مفردات القدرات",
+    "| السؤال | أ | ب | ج | د | الإجابة | الشرح |",
+    "|---|---|---|---|---|---|---|",
+    ...Array.from({ length: 24 }, (_, i) => qRow(i)),
+    "| سؤال بلا إجابة | س | ص | — | — | — | — |",
+    "## أصوات الحيوانات",
+    "| السؤال | أ | ب | ج | د | الإجابة | الشرح |",
+    "|---|---|---|---|---|---|---|",
+    ...Array.from({ length: 6 }, (_, i) => qRow(100 + i)),
+  ].join("\n");
   let a: string, b: string, c: string;
   const day = learningDay();
 
@@ -95,6 +109,17 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(cats.map((x) => x.categoryId).sort()).toEqual(expect.arrayContaining(["vo_animal_sound", "vo_animal_young", "vo_animal_home", "vo_animal_pair"]));
   });
 
+  it("multiple-choice games wait for teacher questions; only approved ones are played, exactly as written", async () => {
+    await expect(games.startGame(a, "meaning_hunter")).rejects.toMatchObject({ code: "content_unavailable" });
+    const r = await questionsMod.importQuestionSet(getDb(), { text: teacherFile, sourceName: "teacher.md", format: "markdown" });
+    expect(r.created).toBe(true);
+    expect((await questionsMod.importQuestionSet(getDb(), { text: teacherFile, sourceName: "again.md", format: "markdown" })).created).toBe(false);
+    await expect(games.startGame(a, "meaning_hunter")).rejects.toMatchObject({ code: "content_unavailable" }); // staged ≠ published
+    expect(await questionsMod.acceptCleanQuestions(getDb(), null)).toBe(30);
+    const flagged = await getDb().select().from(s.teacherQuestions).where(eq(s.teacherQuestions.status, "flagged"));
+    expect(flagged).toHaveLength(1);
+  });
+
   it("published words carry reviewed tashkeel where it matters; letters never change", async () => {
     const [w] = await getDb().select().from(s.vocabularyEntries).where(eq(s.vocabularyEntries.normalized, "جلد"));
     expect(w.lemma).toBe("جَلَد");
@@ -120,12 +145,14 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     const v = await wod.getVocabWod(a);
     expect(v.status).toBe("ready");
     if (v.status !== "ready") return;
-    expect(v.card).toBeNull();
-    await wod.answerVocabWod(a, v.choices[0].id);
+    expect(v.card).toBeNull(); // recall first: the meaning is hidden until the student reveals it
+    const shown = await wod.revealVocabWod(a);
+    expect(shown.status === "ready" && shown.card).toBeTruthy();
+    await wod.rateVocabWod(a, true);
     const act = await activity(a);
     expect(act.wordInteractions).toBe(1);
     expect(act.qualified).toBe(false);
-    const again = await wod.answerVocabWod(a, v.choices[1].id);
+    const again = await wod.rateVocabWod(a, false);
     expect(again.totalXp).toBe(0);
   });
 
@@ -138,27 +165,26 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect((await activity(a)).qualified).toBe(true);
     const [p] = await getDb().select().from(s.studentProfiles).where(eq(s.studentProfiles.userId, a));
     expect(p.currentStreak).toBe(1);
-    // Spaced repetition records exist for the words played.
-    const prog = await getDb().select().from(s.studentVocabularyProgress).where(eq(s.studentVocabularyProgress.userId, a));
-    expect(prog.length).toBeGreaterThan(5);
+    const rounds = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, id)))[0].rounds as { kind: string; stem: string }[];
+    expect(rounds.every((r) => r.kind === "teacher" && r.stem.startsWith("سؤال تجريبي"))).toBe(true);
   });
 
   it("choosing a category starts that category, even with another round still open", async () => {
     const any = await games.startGame(c, "meaning_hunter"); // left unfinished
     const sounds = await games.startGame(c, "meaning_hunter", { category: "vo_animal_sound" });
     expect(sounds.id).not.toBe(any.id);
-    const rounds = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, sounds.id)))[0].rounds as { subskillId: string; kind: string }[];
-    expect(rounds.length).toBeGreaterThan(3);
-    expect(rounds.every((r) => r.subskillId === "vo_animal_sound" && r.kind === "relation")).toBe(true);
+    const rows = async (id: string) => (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, id)))[0].rounds as { subskillId: string; kind: string }[];
+    const sr = await rows(sounds.id);
+    expect(sr.length).toBeGreaterThanOrEqual(5); // recently seen questions are skipped when enough fresh ones exist
+    expect(sr.every((r) => r.subskillId === "vo_animal_sound" && r.kind === "teacher")).toBe(true);
     // Same choice again resumes that round; a different category starts a new one.
     expect((await games.startGame(c, "meaning_hunter", { category: "vo_animal_sound" })).id).toBe(sounds.id);
-    const plurals = await games.startGame(c, "meaning_hunter", { category: "vo_plural" });
-    expect(plurals.id).not.toBe(sounds.id);
-    const pr = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, plurals.id)))[0].rounds as { subskillId: string }[];
-    expect(pr.every((r) => r.subskillId === "vo_plural")).toBe(true);
     const q = await games.startGame(c, "meaning_hunter", { category: "vo_qudurat" });
-    const qr = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, q.id)))[0].rounds as { kind: string }[];
-    expect(qr.every((r) => r.kind === "meaning")).toBe(true);
+    expect(q.id).not.toBe(sounds.id);
+    expect((await rows(q.id)).every((r) => r.subskillId === "vo_qudurat")).toBe(true);
+    // Word-pair categories practise with a board of approved pairs.
+    const plurals = await games.startGame(c, "match_pairs", { category: "vo_plural" });
+    expect((await rows(plurals.id)).every((r) => r.subskillId === "vo_plural")).toBe(true);
   });
 
   it("وصلها صح and ذاكرة لفظي: boards are unambiguous; wrong memory flips don't lock a pair", async () => {

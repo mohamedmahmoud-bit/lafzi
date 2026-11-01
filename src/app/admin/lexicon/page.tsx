@@ -6,12 +6,13 @@ import { Num } from "@/components/ui/num";
 import { Pill } from "@/components/ui/pill";
 import { getDb } from "@/db/client";
 import { entryCategories, vocabImportBatches, vocabImportRows, vocabularyEntries, vocabularyRelationships, wordSenses } from "@/db/schema";
-import { acceptRowAction, editRowAction, rejectRowAction, setEntryAction } from "@/features/admin/content-actions";
+import { acceptRowAction, rejectBankWordAction, editRowAction, rejectRowAction, setEntryAction } from "@/features/admin/content-actions";
 import { getTaxonomy } from "@/features/curriculum/service";
 import { RELATION_TEXT, type RelationType } from "@/features/lexicon/mapping";
 import { lexiconStats } from "@/features/lexicon/service";
 import { cn } from "@/lib/utils";
-import { AcceptCleanButton, ImportDatasetForm, LemmaForm, MergeForm } from "./forms";
+import { AcceptCleanButton, BankWordForm, ImportDatasetForm, LemmaForm, MergeForm, RefreshBankWordsButton } from "./forms";
+import { bankWordStats, listBankWords } from "@/features/bank-words/service";
 
 export const metadata = { title: "مكتبة الكلمات" };
 export const maxDuration = 300;
@@ -21,7 +22,7 @@ const input = "border-border bg-surface w-full rounded-lg border px-2 py-1 text-
 
 export default async function LexiconAdmin({ searchParams }: { searchParams: Promise<{ tab?: string; status?: string; cat?: string; q?: string; page?: string }> }) {
   const sp = await searchParams;
-  const tab = sp.tab === "words" ? "words" : "review";
+  const tab = sp.tab === "words" ? "words" : sp.tab === "bank" ? "bank" : "review";
   const db = getDb();
   const tax = await getTaxonomy();
   const cats = tax.subskillsOf("vocabulary");
@@ -81,11 +82,51 @@ export default async function LexiconAdmin({ searchParams }: { searchParams: Pro
       <nav className="flex gap-2">
         <Link href="/admin/lexicon" className={cn("rounded-full border px-3 py-1 text-sm", tab === "review" && "border-primary bg-primary-soft")}>مراجعة السجلات</Link>
         <Link href="/admin/lexicon?tab=words" className={cn("rounded-full border px-3 py-1 text-sm", tab === "words" && "border-primary bg-primary-soft")}>الكلمات المنشورة</Link>
+        <Link href="/admin/lexicon?tab=bank" className={cn("rounded-full border px-3 py-1 text-sm", tab === "bank" && "border-primary bg-primary-soft")}>كلمات من البنك</Link>
       </nav>
 
-      {tab === "review" ? <ReviewQueue sp={sp} cats={cats} page={page} /> : <Words q={sp.q} cat={sp.cat} cats={cats} page={page} />}
+      {tab === "review" ? <ReviewQueue sp={sp} cats={cats} page={page} /> : tab === "words" ? <Words q={sp.q} cat={sp.cat} cats={cats} page={page} /> : <BankWords kind={sp.cat} page={page} cats={cats} />}
     </div>
   );
+
+  async function BankWords({ kind, page, cats }: { kind?: string; page: number; cats: { id: string; nameAr: string }[] }) {
+    const kinds: [string, string][] = [["pair", "كلمات التناظر"], ["option", "خيارات إكمال الجمل"], ["stem", "جمل الأسئلة"], ["passage", "قطع القراءة"]];
+    const k = kinds.some(([id]) => id === kind) ? kind : undefined;
+    const st = await bankWordStats(db);
+    const words = await listBankWords(db, { kind: k, page });
+    return (
+      <section className="space-y-3">
+        <Card className="space-y-2">
+          <CardTitle>كلمات مستخرجة من أسئلة البنك وقطعه</CardTitle>
+          <CardHint>كلمات نادرة ظهرت في أسئلة نون (الكلمات المتكررة كثيرًا مستبعدة). لا يظهر سؤال البنك للطالب أبدًا — فقط الكلمة بالمعنى الذي تكتبه أنت. صحّح الكلمة إلى صيغتها الأصلية قبل الاعتماد إن لزم.</CardHint>
+          <p className="text-muted text-xs">مرشحة: <Num value={st.candidate ?? 0} /> · معتمدة: <Num value={st.approved ?? 0} /> · مرفوضة: <Num value={st.rejected ?? 0} /></p>
+          <RefreshBankWordsButton />
+        </Card>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/lexicon?tab=bank" className={cn("rounded-full border px-3 py-1 text-xs", !k && "border-sky bg-sky-soft font-bold")}>الأهم أولًا</Link>
+          {kinds.map(([id, l]) => <Link key={id} href={`/admin/lexicon?tab=bank&cat=${id}`} className={cn("rounded-full border px-3 py-1 text-xs", k === id && "border-sky bg-sky-soft font-bold")}>{l}</Link>)}
+        </div>
+        {!words.length && <CardHint>لا توجد كلمات مرشحة — استورد بنك الأسئلة ثم اضغط «استخراج الكلمات من البنك».</CardHint>}
+        <ul className="space-y-2">
+          {words.map((w) => (
+            <li key={w.id}>
+              <Card className="space-y-2 p-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted">ظهرت <Num value={w.frequency} /> مرة · {[...new Set(w.sources.map((x) => x.kind))].map((x) => kinds.find(([id]) => id === x)?.[1] ?? x).join("، ")}</span>
+                  <form action={rejectBankWordAction} className="ms-auto"><input type="hidden" name="id" value={w.id} /><Button size="sm" variant="ghost">ليست مفردة مهمة</Button></form>
+                </div>
+                <BankWordForm id={w.id} lemma={w.lemma} categories={cats} />
+              </Card>
+            </li>
+          ))}
+        </ul>
+        <div className="flex gap-3 text-sm">
+          {page > 1 && <Link href={`/admin/lexicon?tab=bank${k ? `&cat=${k}` : ""}&page=${page - 1}`}>السابق</Link>}
+          {words.length === 50 && <Link href={`/admin/lexicon?tab=bank${k ? `&cat=${k}` : ""}&page=${page + 1}`}>التالي</Link>}
+        </div>
+      </section>
+    );
+  }
 
   async function ReviewQueue({ sp, cats, page }: { sp: { status?: string; cat?: string }; cats: { id: string; nameAr: string }[]; page: number }) {
     const status = (STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as (typeof STATUSES)[number]) : "flagged";

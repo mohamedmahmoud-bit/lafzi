@@ -12,11 +12,9 @@ import {
   userBlocks,
   userReports,
 } from "@/db/schema";
-import { buildLexiconRounds, startFrozenSession } from "@/features/games/session.service";
+import { buildLexiconRounds, loadGameContent, startFrozenSession } from "@/features/games/session.service";
 import { CHALLENGE_GAMES, gameById } from "@/features/games/modes";
 import type { Round } from "@/features/games/types";
-import { loadLexicon } from "@/features/lexicon/content";
-import { isProduction } from "@/lib/env";
 import { hashString, seededRandom } from "@/lib/utils";
 
 export class SocialError extends Error {
@@ -112,8 +110,7 @@ export async function listFriends(userId: string): Promise<FriendRow[]> {
 export async function createChallenge(userId: string, gameId: string) {
   if (!CHALLENGE_GAMES.includes(gameId)) throw new SocialError("unknown_game");
   const g = gameById(gameId)!;
-  const lx = await loadLexicon(getDb(), { isProduction: isProduction() });
-  const rounds: Round[] = buildLexiconRounds(g, lx, seededRandom(hashString(`challenge:${userId}:${Date.now()}`)));
+  const rounds: Round[] = buildLexiconRounds(g, await loadGameContent(), seededRandom(hashString(`challenge:${userId}:${Date.now()}`)));
   if (rounds.length < 3) throw new SocialError("content_unavailable");
   const code = newCode();
   const [c] = await getDb()

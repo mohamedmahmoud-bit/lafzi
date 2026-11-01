@@ -1,6 +1,8 @@
 /** Server-side round snapshot (stored in game_sessions.rounds). Answer keys never leave the server unanswered. */
 export type Round = {
-  kind: "noon_question" | "relation_recall" | "meaning" | "relation" | "match" | "memory" | "odd";
+  kind: "noon_question" | "relation_recall" | "meaning" | "relation" | "match" | "memory" | "odd" | "teacher";
+  /** Teacher-written question id (kind = teacher). */
+  teacherQuestionId?: string;
   /** Instruction shown above the stem (e.g. «ما صوت الأسد؟»). */
   prompt?: string;
   questionId: string | null;
@@ -19,7 +21,7 @@ export type Round = {
   hintRemoved: string | null;
 };
 
-export type ClientRound = Omit<Round, "correctId" | "explanation" | "versionId" | "questionId" | "entryIds" | "relationshipId"> & {
+export type ClientRound = Omit<Round, "correctId" | "explanation" | "versionId" | "questionId" | "entryIds" | "relationshipId" | "teacherQuestionId"> & {
   index: number;
   answered: null | { choiceId: string; isCorrect: boolean; correctId: string; explanation: string | null; points: number; hintUsed: boolean };
 };

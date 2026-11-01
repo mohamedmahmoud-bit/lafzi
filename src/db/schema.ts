@@ -1358,3 +1358,59 @@ export const challengeParticipants = pgTable(
   },
   (t) => [primaryKey({ columns: [t.challengeId, t.userId] })],
 );
+
+// ─── Teacher-authored question sets (the only source of MCQ questions in vocabulary games) ───
+
+export const questionSets = pgTable("question_sets", {
+  id: id(),
+  sourceName: text("source_name").notNull(),
+  fileHash: text("file_hash").notNull().unique(),
+  rowCount: integer("row_count").notNull(),
+  stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+});
+
+/** One question exactly as the teacher wrote it (stem, options, answer, explanation). */
+export const teacherQuestions = pgTable(
+  "teacher_questions",
+  {
+    id: id(),
+    setId: uuid("set_id")
+      .notNull()
+      .references(() => questionSets.id, { onDelete: "cascade" }),
+    rowNumber: integer("row_number").notNull(),
+    raw: jsonb("raw").$type<Record<string, string>>().notNull(),
+    stem: text("stem").notNull(),
+    choices: jsonb("choices").$type<{ id: string; text: string }[]>().notNull(),
+    correctId: text("correct_id"),
+    explanation: text("explanation"),
+    categoryId: text("category_id"),
+    difficulty: smallint("difficulty").notNull().default(2),
+    status: importRowStatus("status").notNull().default("staged"),
+    flags: jsonb("flags").$type<{ code: string; severity: "error" | "warning"; message: string }[]>().notNull().default([]),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("teacher_questions_uq").on(t.setId, t.rowNumber), index().on(t.status, t.categoryId)],
+);
+
+/** Words found in Noon bank questions/passages, waiting for a reviewer to add a meaning. */
+export const bankWordCandidates = pgTable(
+  "bank_word_candidates",
+  {
+    id: id(),
+    normalized: text("normalized").notNull(),
+    lemma: text("lemma").notNull(),
+    frequency: integer("frequency").notNull().default(0),
+    /** Ranking: rare question-target words first (see bank-words/extract.ts). */
+    score: integer("score").notNull().default(0),
+    /** [{noonQuestionId, kind: stem|choice|passage}] — internal provenance, never shown to students. */
+    sources: jsonb("sources").$type<{ noonQuestionId: number; kind: string }[]>().notNull().default([]),
+    status: text("status").notNull().default("candidate"), // candidate | approved | rejected
+    entryId: uuid("entry_id"),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("bank_word_candidates_norm_uq").on(t.normalized), index().on(t.status, t.frequency)],
+);

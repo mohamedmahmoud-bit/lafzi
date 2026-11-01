@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { acceptCleanBatchAction, importDatasetAction, mergeEntriesAction, setLemmaAction } from "@/features/admin/content-actions";
+import { acceptCleanBatchAction, approveBankWordAction, importDatasetAction, mergeEntriesAction, refreshBankWordsAction, setLemmaAction, type ActionState } from "@/features/admin/content-actions";
 
 export function ImportDatasetForm() {
   const [s, action, pending] = useActionState(importDatasetAction, null);
@@ -73,6 +73,35 @@ export function LemmaForm({ id, lemma }: { id: string; lemma: string }) {
       <input name="lemma" defaultValue={lemma} aria-label="التشكيل" className="border-border bg-surface font-display w-36 rounded-lg border px-2 py-1 text-lg" />
       <Button size="sm" variant="ghost" disabled={pending}>حفظ التشكيل</Button>
       {s?.message && <span className={s.ok ? "text-mint text-xs" : "text-rose text-xs"}>{s.message}</span>}
+    </form>
+  );
+}
+
+export function RefreshBankWordsButton() {
+  const [s, action, pending] = useActionState<ActionState, FormData>(() => refreshBankWordsAction(), null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <Button size="sm" variant="outline" disabled={pending}>{pending ? "جارٍ الفحص…" : "استخراج الكلمات من البنك"}</Button>
+      {s?.message && <span className={s.ok ? "text-mint text-xs" : "text-rose text-xs"}>{s.message}</span>}
+    </form>
+  );
+}
+
+/** Reviewer writes the meaning (and may fix the word to its dictionary form) before approving. */
+export function BankWordForm({ id, lemma, categories }: { id: string; lemma: string; categories: { id: string; nameAr: string }[] }) {
+  const [s, action, pending] = useActionState(approveBankWordAction, null);
+  if (s?.ok) return <p className="text-mint text-sm">{s.message}</p>;
+  return (
+    <form action={action} className="grid gap-2 sm:grid-cols-[9rem_1fr_1fr_9rem_auto] sm:items-center">
+      <input type="hidden" name="id" value={id} />
+      <input name="lemma" defaultValue={lemma} aria-label="الكلمة (صيغتها الأصلية مع التشكيل)" className="border-border bg-surface font-display rounded-lg border px-2 py-1 text-lg" />
+      <input name="meaning" required placeholder="المعنى (تكتبه أنت)" className="border-border bg-surface rounded-lg border px-2 py-1 text-sm" />
+      <input name="example" placeholder="مثال (اختياري)" className="border-border bg-surface rounded-lg border px-2 py-1 text-sm" />
+      <select name="categoryId" defaultValue="vo_qudurat" className="border-border bg-surface rounded-lg border px-2 py-1 text-sm" aria-label="القسم">
+        {categories.map((c) => <option key={c.id} value={c.id}>{c.nameAr}</option>)}
+      </select>
+      <Button size="sm" variant="success" disabled={pending}>اعتماد</Button>
+      {s?.message && !s.ok && <span className="text-rose text-xs sm:col-span-5">{s.message}</span>}
     </form>
   );
 }

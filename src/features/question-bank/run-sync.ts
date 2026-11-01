@@ -24,6 +24,7 @@ export async function runQuestionBankSync(mode: "scheduled" | "manual" | "seed",
   });
   // Any question that was suspended/archived invalidates vocabulary built on it.
   const vocab = run.status === "succeeded" || run.status === "partial" ? await runVocabularyExtraction(db) : null;
+  if (vocab) await (await import("@/features/bank-words/service")).refreshBankWords(db);
   await analytics.track("question_bank_synced", { runId: run.id, status: run.status, ...(run.stats ?? {}) }, { userId: triggeredBy ?? undefined });
   return { run, vocab };
 }

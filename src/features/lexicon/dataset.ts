@@ -82,8 +82,8 @@ export function parseMarkdownDataset(text: string): SourceRow[] {
   return out;
 }
 
-/** CSV with a header row; a «القسم/section/category» column gives the section. */
-export function parseCsvDataset(text: string): SourceRow[] {
+/** RFC-4180 CSV reader (quoted fields, escaped quotes, CRLF). */
+export function readCsv(text: string): string[][] {
   const rows: string[][] = [];
   let cur: string[] = [];
   let field = "";
@@ -100,8 +100,7 @@ export function parseCsvDataset(text: string): SourceRow[] {
     else if (c === ",") {
       cur.push(field);
       field = "";
-    }
-    else if (c === "\n" || c === "\r") {
+    } else if (c === "\n" || c === "\r") {
       if (c === "\r" && text[i + 1] === "\n") i++;
       cur.push(field);
       if (cur.some((x) => x.trim())) rows.push(cur);
@@ -111,6 +110,12 @@ export function parseCsvDataset(text: string): SourceRow[] {
   }
   cur.push(field);
   if (cur.some((x) => x.trim())) rows.push(cur);
+  return rows;
+}
+
+/** CSV with a header row; a «القسم/section/category» column gives the section. */
+export function parseCsvDataset(text: string): SourceRow[] {
+  const rows = readCsv(text);
   const [headers, ...body] = rows;
   if (!headers) return [];
   const secIdx = headers.findIndex((h) => ["القسم", "الفئة", "التصنيف", "section", "category"].includes(h.trim().toLowerCase()));
