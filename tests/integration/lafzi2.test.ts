@@ -282,6 +282,12 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(board.authorized).toBe(true);
     expect(board.rows.map((r) => r.userId).sort()).toEqual([a, b, c].sort());
     expect(board.rows.find((r) => r.userId === b)!.displayName).toBe("فهد سالم"); // full name
+    // Each student's points are their own week's XP (not the whole group's total).
+    for (const r of board.rows) {
+      const [own] = await getDb().select({ xp: sql<number>`coalesce(sum(${s.xpTransactions.xp}),0)::int` }).from(s.xpTransactions).where(eq(s.xpTransactions.userId, r.userId));
+      expect(r.xp).toBe(own.xp);
+    }
+    expect(new Set(board.rows.map((r) => r.xp)).size).toBeGreaterThan(1);
     await updateProfile(c, { shareScores: false });
     const hidden = await getCohortBoard({ id: a, cohortId: prof.cohortId }, [b]);
     expect(hidden.rows.some((r) => r.userId === c)).toBe(false);

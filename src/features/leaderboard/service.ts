@@ -120,17 +120,25 @@ export type BoardRow = RankedRow & { level: number; isMe: boolean };
 
 async function weekXpFor(userIds: string[], start: string, end: string) {
   if (!userIds.length) return [];
-  const rows = await getDb()
+  // Aggregate per student, then join (a correlated subquery here rendered unqualified column
+  // names, so every student got the whole week's total).
+  const weekXp = getDb()
+    .select({ userId: xpTransactions.userId, xp: sql<number>`sum(${xpTransactions.xp})::int`.as("xp") })
+    .from(xpTransactions)
+    .where(and(gte(xpTransactions.day, start), lte(xpTransactions.day, end), inArray(xpTransactions.userId, userIds)))
+    .groupBy(xpTransactions.userId)
+    .as("week_xp");
+  return getDb()
     .select({
       userId: studentProfiles.userId,
       displayName: sql<string>`coalesce(${studentProfiles.officialFullName}, ${studentProfiles.displayName})`,
       avatar: studentProfiles.avatar,
       level: studentProfiles.currentLevel,
-      xp: sql<number>`coalesce((select sum(${xpTransactions.xp}) from ${xpTransactions} where ${xpTransactions.userId} = ${studentProfiles.userId} and ${xpTransactions.day} between ${start} and ${end}), 0)::int`,
+      xp: sql<number>`coalesce(${weekXp.xp}, 0)::int`,
     })
     .from(studentProfiles)
+    .leftJoin(weekXp, eq(weekXp.userId, studentProfiles.userId))
     .where(inArray(studentProfiles.userId, userIds));
-  return rows;
 }
 
 /** Friends board: you + accepted, unblocked friends. Names are visible to friends. */

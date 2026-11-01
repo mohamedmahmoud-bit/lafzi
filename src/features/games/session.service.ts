@@ -308,7 +308,8 @@ export async function getGameView(userId: string, sessionId: string): Promise<Ga
   return {
     id: s.id,
     gameId: s.gameTypeId,
-    mechanic: gameById(s.gameTypeId)?.mechanic ?? "mcq",
+    // The daily challenge falls back to a word-pair board when there aren't enough teacher questions.
+    mechanic: (rounds[0] as { kind?: string } | undefined)?.kind === "match" ? "match" : (gameById(s.gameTypeId)?.mechanic ?? "mcq"),
     kind: s.kind,
     challengeId: s.challengeId,
     categoryId: s.categoryId,

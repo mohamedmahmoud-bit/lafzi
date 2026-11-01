@@ -7,7 +7,7 @@ export const MISSION_TASKS = [
   {
     id: "daily_session",
     title: "تحدي اليوم",
-    detail: "١٠ أسئلة في ٣ دقائق",
+    detail: "تحدٍّ قصير في ٣ دقائق",
     minutes: 3,
   },
 ] as const;
