@@ -77,3 +77,24 @@ auditable ledger with daily caps; random guessing earns little (accuracy multipl
 - **Boards** (وصلها صح، ذاكرة لفظي) only pair approved words with their approved counterpart.
 - **Bank words**: words extracted from Noon bank question stems, choices and passages appear in `/admin/lexicon` → «مفردات بنك نون». A reviewer writes the meaning (and may fix the base form) before a word is published. Noon questions themselves are not shown to students.
 - **Word of the Day** is a flashcard: recall → reveal → rate yourself.
+
+## Roadmap: pictures, sounds and videos for words (planned)
+
+Goal: let students *see* and *hear* a word (an animal's picture and sound, a picture of a tool or place) so meaning is built from experience, not only definitions.
+
+1. **Data model**: `entry_media` (entryId, kind `image | audio | youtube`, url or YouTube id, start/end seconds, credit and licence, status `pending | approved`, addedBy). Media shows to students only after a reviewer approves it, the same rule as words.
+2. **Sources**
+   - Admin uploads (images and short audio) stored in Vercel Blob.
+   - YouTube links with a start and end time (for example, a horse neighing), embedded via `youtube-nocookie.com` with related videos off.
+   - Openly licensed libraries such as Wikimedia Commons, credited on the card.
+   - Never auto-fetched or hot-linked without review.
+3. **Admin**: a «وسائط» panel on each word in `/admin/lexicon` (paste a YouTube link with start and end time, or upload), with a preview, approval, and credit field.
+4. **Student experiences**
+   - **«اسمع واختر»**: play a sound, then pick the word (صهيل، نهيق، هديل…).
+   - **«صورة وكلمة»**: a board matching pictures to words.
+   - Word of the Day and flashcards show the picture or sound *after* the student tries to recall it, so active recall comes first.
+5. **Safety (students may be minors)**
+   - Reviewed media only; no comments and no autoplay with sound.
+   - Restrict the CSP `frame-src` to youtube-nocookie.
+   - Students can report media; a report hides it until it is reviewed again.
+6. **Order**: animal sounds and animal pictures first (they map to existing categories), then tools and places from the bank words.
