@@ -26,6 +26,8 @@ import { isResourceType } from "@/features/study/providers";
 import * as lexicon from "@/features/lexicon/service";
 import * as teacherQ from "@/features/questions/service";
 import * as bankWords from "@/features/bank-words/service";
+import * as media from "@/features/media/service";
+import { parseTime } from "@/features/media/parse";
 import { approveCorroborated, approveMeaning, decideEntry, decideRelationship, runVocabularyExtraction } from "@/features/word-bank/service";
 import { isProduction } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -498,4 +500,69 @@ export async function rejectBankWordAction(form: FormData) {
   await bankWords.rejectBankWords(getDb(), ids);
   await audit({ actorUserId: admin.id, action: "bank_words.reject", metadata: { count: ids.length } });
   revalidatePath("/admin/lexicon");
+}
+
+// ─── Word media (pictures, sounds, YouTube clips) ───────────────────────────
+
+export async function importMediaAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size) throw new Error("اختر ملف CSV");
+    if (file.size > 2_000_000) throw new Error("الملف كبير جدًا");
+    const r = await media.importMediaCsv(getDb(), await file.text(), admin.id);
+    await audit({ actorUserId: admin.id, action: "media.import", metadata: { added: r.added, duplicates: r.duplicates, unknown: r.unknownWords.length, invalid: r.invalid.length } });
+    revalidatePath("/admin/media");
+    const parts = [`أُضيف ${r.added} رابطًا للمراجعة`];
+    if (r.duplicates) parts.push(`${r.duplicates} مكرر`);
+    if (r.unknownWords.length) parts.push(`كلمات غير منشورة: ${r.unknownWords.slice(0, 12).join("، ")}${r.unknownWords.length > 12 ? "…" : ""}`);
+    if (r.invalid.length) parts.push(`صفوف فيها أخطاء: ${r.invalid.slice(0, 8).map((x) => `#${x.rowNumber} ${x.word} (${x.error})`).join("، ")}`);
+    return { ok: r.added > 0 || r.duplicates > 0, message: parts.join(" · ") };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+const mediaForm = z.object({
+  word: z.string().trim().min(1).max(80),
+  kind: z.enum(["image", "audio", "youtube"]),
+  url: z.string().trim().min(8).max(1000),
+  start: z.string().optional(),
+  end: z.string().optional(),
+  credit: z.string().max(200).optional(),
+  approve: z.string().optional(),
+});
+
+export async function addMediaAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const f = mediaForm.parse(Object.fromEntries(form));
+    const { lexKey } = await import("@/features/lexicon/normalize");
+    const [e] = await getDb()
+      .select({ id: vocabularyEntries.id })
+      .from(vocabularyEntries)
+      .where(and(eq(vocabularyEntries.normalized, lexKey(f.word)), eq(vocabularyEntries.status, "approved"), isNull(vocabularyEntries.mergedInto)))
+      .limit(1);
+    if (!e) throw new Error(`«${f.word}» ليست كلمة منشورة في القاموس`);
+    const res = await media.addMedia(getDb(), {
+      entryId: e.id,
+      input: { kind: f.kind, url: f.url, startSec: parseTime(f.start), endSec: parseTime(f.end), credit: f.credit ? sanitizeText(f.credit) : null },
+      addedBy: admin.id,
+      approve: f.approve === "on",
+    });
+    await audit({ actorUserId: admin.id, action: "media.add", entityType: "entry_media", entityId: res.id ?? undefined, metadata: { kind: f.kind } });
+    revalidatePath("/admin/media");
+    return { ok: true, message: res.duplicate ? "هذا الرابط مضاف لهذه الكلمة من قبل." : f.approve === "on" ? "أُضيف واعتُمد." : "أُضيف للمراجعة." };
+  } catch (e) {
+    return fail(e instanceof z.ZodError ? new Error("تحقق من الحقول") : e);
+  }
+}
+
+export async function decideMediaAction(form: FormData) {
+  const admin = await assertAdmin();
+  const id = z.uuid().parse(form.get("id"));
+  const status = z.enum(["approved", "rejected"]).parse(form.get("status"));
+  await media.decideMedia(getDb(), id, status, admin.id);
+  await audit({ actorUserId: admin.id, action: `media.${status}`, entityType: "entry_media", entityId: id });
+  revalidatePath("/admin/media");
 }

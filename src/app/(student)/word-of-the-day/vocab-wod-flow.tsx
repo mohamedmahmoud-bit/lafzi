@@ -8,6 +8,7 @@ import { Confetti } from "@/components/game/feedback";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardHint } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { WordMedia } from "@/components/word-media";
 import type { RewardSummary } from "@/features/gamification/rewards";
 import { rateVocabWodAction, revealVocabWodAction } from "@/features/word-bank/actions";
 import type { VocabWodView } from "@/features/word-bank/wod.service";
@@ -75,6 +76,7 @@ export function VocabWodFlow({ initial, categoryNames }: { initial: Ready; categ
                 ))}
               </ul>
             )}
+            <WordMedia word={view.word} items={view.card.media} />
           </Card>
         )
       )}

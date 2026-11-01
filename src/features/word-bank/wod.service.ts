@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb, type DbOrTx, type Tx } from "@/db/client";
+import { approvedMediaFor, type ApprovedMedia } from "@/features/media/service";
 import {
   studentDailyActivity,
   studentProfiles,
@@ -61,6 +62,8 @@ export type VocabWodView =
         meanings: { text: string; example: string | null }[];
         relations: { label: string; other: string; direction: "to" | "from" }[];
         mastery: string;
+        /** Approved pictures / sounds / clips — after recall, never before. */
+        media: ApprovedMedia[];
       };
     };
 
@@ -81,6 +84,7 @@ export async function getVocabWod(userId: string, day = learningDay()): Promise<
         .filter((r) => r.fromId === entryId || r.toId === entryId)
         .map((r) => ({ label: RELATION_TEXT[r.type].label, other: lx.entries.get(r.fromId === entryId ? r.toId : r.fromId)!.lemma, direction: (r.fromId === entryId ? "to" : "from") as "to" | "from" })),
       mastery: MASTERY_LABELS[(prog?.state ?? "new") as MasteryState],
+      media: (await approvedMediaFor(db, [entryId])).get(entryId) ?? [],
     };
   }
   return { status: "ready", day, word: entry.lemma, categories: entry.categories, revealed, rated: row?.attemptedAt ? { knew: !!row.isCorrect } : null, card };

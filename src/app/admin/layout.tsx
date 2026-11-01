@@ -6,6 +6,7 @@ const LINKS = [
   { href: "/admin", label: "المؤشرات" },
   { href: "/admin/lexicon", label: "مكتبة الكلمات" },
   { href: "/admin/questions", label: "أسئلة المعلم" },
+  { href: "/admin/media", label: "صور وأصوات" },
   { href: "/admin/question-bank", label: "بنك الأسئلة" },
   { href: "/admin/vocabulary", label: "مفردات بنك نون" },
   { href: "/admin/integrations/noon", label: "تكامل نون" },

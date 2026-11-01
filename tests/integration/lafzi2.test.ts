@@ -308,4 +308,20 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     const noCohort = await getCohortBoard({ id: a, cohortId: null }, []);
     expect(noCohort.rows.length).toBeGreaterThanOrEqual(2);
   });
+  it("word media: imported links wait for approval, then show on the revealed Word of the Day card", async () => {
+    const media = await import("@/features/media/service");
+    const v = await wod.getVocabWod(a);
+    if (v.status !== "ready") throw new Error("no wod");
+    const csv = `الكلمة,النوع,الرابط,من,إلى,المصدر\n${v.word},يوتيوب,https://youtu.be/dQw4w9WgXcQ,0:02,0:08,اختبار\nكلمةغيرموجودة,صورة,https://x.org/a.png,,,\n${v.word},يوتيوب,https://youtu.be/dQw4w9WgXcQ,,,\n`;
+    const r = await media.importMediaCsv(getDb(), csv, null);
+    expect(r.added).toBe(1);
+    expect(r.unknownWords).toEqual(["كلمةغيرموجودة"]);
+    expect(r.invalid).toHaveLength(1); // no end time
+    expect((await wod.getVocabWod(a)).status === "ready" && (await wod.getVocabWod(a) as { card: { media: unknown[] } }).card.media).toHaveLength(0);
+    const [row] = await getDb().select().from(s.entryMedia);
+    await media.decideMedia(getDb(), row.id, "approved", null);
+    const after = (await wod.getVocabWod(a)) as { card: { media: { youtubeId: string; startSec: number; endSec: number }[] } };
+    expect(after.card.media).toEqual([expect.objectContaining({ youtubeId: "dQw4w9WgXcQ", startSec: 2, endSec: 8 })]);
+    expect(await media.mediaTemplateCsv(getDb())).toContain("الكلمة,النوع,الرابط");
+  });
 });

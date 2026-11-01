@@ -1414,3 +1414,33 @@ export const bankWordCandidates = pgTable(
   },
   (t) => [uniqueIndex("bank_word_candidates_norm_uq").on(t.normalized), index().on(t.status, t.frequency)],
 );
+
+// ─── Word media (pictures, sounds, YouTube clips) — shown to students only after approval ─────
+
+export const mediaKind = pgEnum("media_kind", ["image", "audio", "youtube"]);
+export const mediaStatus = pgEnum("media_status", ["pending", "approved", "rejected"]);
+
+export const entryMedia = pgTable(
+  "entry_media",
+  {
+    id: id(),
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => vocabularyEntries.id, { onDelete: "cascade" }),
+    kind: mediaKind("kind").notNull(),
+    /** https URL of the image/audio file, or the original YouTube link. */
+    url: text("url").notNull(),
+    /** Validated 11-character YouTube id (kind = youtube). */
+    youtubeId: text("youtube_id"),
+    startSec: integer("start_sec"),
+    endSec: integer("end_sec"),
+    /** Credit / licence shown under the media (e.g. «Wikimedia Commons, CC BY-SA»). */
+    credit: text("credit"),
+    status: mediaStatus("status").notNull().default("pending"),
+    addedBy: uuid("added_by"),
+    reviewedBy: uuid("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("entry_media_entry_url_uq").on(t.entryId, t.kind, t.url), index().on(t.status), index().on(t.entryId, t.status)],
+);

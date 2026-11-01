@@ -36,6 +36,13 @@
       "when": 1793527062079,
       "tag": "0004_teacher_questions_bank_words",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793533276717,
+      "tag": "0005_word_media",
+      "breakpoints": true
     }
   ]
 }
