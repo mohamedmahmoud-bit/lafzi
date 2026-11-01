@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { acceptCleanBatchAction, approveBankWordAction, importDatasetAction, mergeEntriesAction, refreshBankWordsAction, setLemmaAction, type ActionState } from "@/features/admin/content-actions";
+import { acceptCleanBatchAction, approveBankWordAction, importDatasetAction, mergeEntriesAction, moveSenseAction, refreshBankWordsAction, setLemmaAction, type ActionState } from "@/features/admin/content-actions";
 
 export function ImportDatasetForm() {
   const [s, action, pending] = useActionState(importDatasetAction, null);
@@ -102,6 +102,19 @@ export function BankWordForm({ id, lemma, categories }: { id: string; lemma: str
       </select>
       <Button size="sm" variant="success" disabled={pending}>اعتماد</Button>
       {s?.message && !s.ok && <span className="text-rose text-xs sm:col-span-5">{s.message}</span>}
+    </form>
+  );
+}
+
+/** For two different words written with the same letters (خُوار / خَوَر): move this meaning to the right word. */
+export function MoveSenseForm({ senseId }: { senseId: string }) {
+  const [s, action, pending] = useActionState(moveSenseAction, null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-1">
+      <input type="hidden" name="senseId" value={senseId} />
+      <input name="target" required placeholder="انقل هذا المعنى إلى كلمة…" aria-label="الكلمة الصحيحة لهذا المعنى" className="border-border bg-surface w-44 rounded-lg border px-2 py-0.5 text-xs" />
+      <Button size="sm" variant="ghost" disabled={pending}>{pending ? "…" : "نقل"}</Button>
+      {s?.message && <span className={s.ok ? "text-mint text-xs" : "text-rose text-xs"}>{s.message}</span>}
     </form>
   );
 }

@@ -566,3 +566,17 @@ export async function decideMediaAction(form: FormData) {
   await audit({ actorUserId: admin.id, action: `media.${status}`, entityType: "entry_media", entityId: id });
   revalidatePath("/admin/media");
 }
+
+export async function moveSenseAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const admin = await assertAdmin();
+  try {
+    const senseId = z.uuid().parse(form.get("senseId"));
+    const target = z.string().trim().min(1).max(80).parse(form.get("target"));
+    const r = await lexicon.moveSense(getDb(), { senseId, target, reviewerId: admin.id });
+    await audit({ actorUserId: admin.id, action: "lexicon.move_sense", entityType: "word_sense", entityId: senseId, metadata: { from: r.from, to: r.to } });
+    revalidatePath("/admin/lexicon");
+    return { ok: true, message: `نُقل المعنى من «${r.from}» إلى «${r.to}».` };
+  } catch (e) {
+    return fail(e instanceof z.ZodError ? new Error("اكتب الكلمة الصحيحة") : e);
+  }
+}

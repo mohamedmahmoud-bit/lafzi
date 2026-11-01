@@ -262,3 +262,65 @@ export async function setLemma(db: DbOrTx, entryId: string, lemma: string) {
   if (lexKey(v) !== e.normalized) throw new Error("يُسمح بتعديل التشكيل فقط — الحروف يجب أن تبقى كما هي");
   await db.update(vocabularyEntries).set({ lemma: v }).where(eq(vocabularyEntries.id, entryId));
 }
+
+/**
+ * Move one meaning (and the pair approved from the same dataset row) to a different word — for words
+ * that share letters but are different words, e.g. «خُوار» (صوت البقر) vs «خَوَر» (ضعف). The original
+ * dataset row is never overwritten: the correction is stored beside it with a note.
+ */
+export async function moveSense(db: Db, p: { senseId: string; target: string; reviewerId: string | null }) {
+  const target = p.target.trim();
+  if (!target) throw new Error("اكتب الكلمة الصحيحة");
+  return db.transaction(async (tx) => {
+    const [s] = await tx.select().from(wordSenses).where(eq(wordSenses.id, p.senseId)).for("update").limit(1);
+    if (!s) throw new Error("المعنى غير موجود");
+    const [from] = await tx.select().from(vocabularyEntries).where(eq(vocabularyEntries.id, s.entryId)).limit(1);
+    if (lexKey(target) === from.normalized) throw new Error("هذه نفس الكلمة — لتعديل التشكيل استخدم خانة التشكيل");
+    const to = await upsertEntry(tx, target, from.difficulty);
+
+    const toSenses = await tx.select().from(wordSenses).where(eq(wordSenses.entryId, to.id));
+    const same = toSenses.find((x) => meaningKey(x.meaning) === meaningKey(s.meaning));
+    let senseId = s.id;
+    if (same) {
+      await tx.update(wordSenses).set({ sources: [...(same.sources as Record<string, unknown>[]), ...(s.sources as Record<string, unknown>[])] }).where(eq(wordSenses.id, same.id));
+      await tx.delete(wordSenses).where(eq(wordSenses.id, s.id));
+      senseId = same.id;
+    } else {
+      await tx.update(wordSenses).set({ entryId: to.id }).where(eq(wordSenses.id, s.id));
+    }
+
+    const rows = await tx.select().from(vocabImportRows).where(eq(vocabImportRows.senseId, s.id));
+    for (const r of rows) {
+      await addCategory(tx, to.id, r.categoryId);
+      let relationshipId = r.relationshipId;
+      if (r.relationshipId) {
+        const [rel] = await tx.select().from(vocabularyRelationships).where(eq(vocabularyRelationships.id, r.relationshipId)).limit(1);
+        if (rel && rel.fromEntryId === from.id) {
+          const [dup] = await tx
+            .select()
+            .from(vocabularyRelationships)
+            .where(and(eq(vocabularyRelationships.fromEntryId, to.id), eq(vocabularyRelationships.toEntryId, rel.toEntryId), eq(vocabularyRelationships.type, rel.type)))
+            .limit(1);
+          if (dup) {
+            await tx.update(vocabularyRelationships).set({ evidence: [...(dup.evidence as Record<string, unknown>[]), ...(rel.evidence as Record<string, unknown>[])] }).where(eq(vocabularyRelationships.id, dup.id));
+            await tx.delete(vocabularyRelationships).where(eq(vocabularyRelationships.id, rel.id));
+            relationshipId = dup.id;
+          } else {
+            await tx.update(vocabularyRelationships).set({ fromEntryId: to.id, updatedAt: new Date() }).where(eq(vocabularyRelationships.id, rel.id));
+          }
+        }
+      }
+      const note = [r.note, `نُقل المعنى إلى «${target}»`].filter(Boolean).join(" · ");
+      await tx.update(vocabImportRows).set({ entryId: to.id, senseId, relationshipId, edited: { ...(r.edited ?? {}), word: target }, note, reviewedBy: p.reviewerId, reviewedAt: new Date() }).where(eq(vocabImportRows.id, r.id));
+      // The old word keeps a category only if something else still puts it there.
+      if (r.categoryId) {
+        const [stillRow] = await tx.select({ id: vocabImportRows.id }).from(vocabImportRows).where(and(eq(vocabImportRows.entryId, from.id), eq(vocabImportRows.categoryId, r.categoryId), eq(vocabImportRows.status, "accepted"))).limit(1);
+        const incoming = await tx.select({ type: vocabularyRelationships.type }).from(vocabularyRelationships).where(and(eq(vocabularyRelationships.toEntryId, from.id), eq(vocabularyRelationships.status, "approved")));
+        if (!stillRow && !incoming.some((x) => RELATION_CATEGORY[x.type as RelationType] === r.categoryId)) {
+          await tx.delete(entryCategories).where(and(eq(entryCategories.entryId, from.id), eq(entryCategories.categoryId, r.categoryId)));
+        }
+      }
+    }
+    return { from: from.lemma, to: to.lemma, toId: to.id };
+  });
+}

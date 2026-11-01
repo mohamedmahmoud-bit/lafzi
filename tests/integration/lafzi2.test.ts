@@ -141,6 +141,26 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     await lexicon.setLemma(getDb(), w.id, "جَلَد");
   });
 
+  it("a meaning that belongs to a different word with the same letters can be moved (خُوار ≠ خَوَر)", async () => {
+    const [kh] = await getDb().select().from(s.vocabularyEntries).where(eq(s.vocabularyEntries.normalized, lexKey("خوار")));
+    const [weak] = await getDb().select().from(s.wordSenses).where(and(eq(s.wordSenses.entryId, kh.id), eq(s.wordSenses.meaning, "ضعف، وهن")));
+    const r = await lexicon.moveSense(getDb(), { senseId: weak.id, target: "خَوَر", reviewerId: null });
+    expect(r.to).toBe("خَوَر");
+    // The weakness meaning and its synonym pair now belong to «خَوَر»; «خوار» keeps the cow sound.
+    expect(await getDb().select().from(s.wordSenses).where(eq(s.wordSenses.entryId, kh.id))).toHaveLength(0);
+    const rels = await getDb().select().from(s.vocabularyRelationships).where(eq(s.vocabularyRelationships.fromEntryId, r.toId));
+    expect(rels.map((x) => x.type)).toEqual(["synonym"]);
+    const sound = await getDb().select().from(s.vocabularyRelationships).where(and(eq(s.vocabularyRelationships.toEntryId, kh.id), eq(s.vocabularyRelationships.type, "sound")));
+    expect(sound).toHaveLength(1);
+    const cats = (await getDb().select().from(s.entryCategories).where(eq(s.entryCategories.entryId, kh.id))).map((c) => c.categoryId);
+    expect(cats).toContain("vo_animal_sound");
+    expect(cats).not.toContain("vo_synonym");
+    // The original dataset row is kept; the correction sits beside it.
+    const [row] = await getDb().select().from(s.vocabImportRows).where(eq(s.vocabImportRows.senseId, weak.id));
+    expect(row.word).toBe("خوار");
+    expect(row.edited?.word).toBe("خَوَر");
+  });
+
   it("a reviewer correction is stored beside the original and used on approval", async () => {
     const [row] = await getDb().select().from(s.vocabImportRows).where(and(eq(s.vocabImportRows.word, "دب"), eq(s.vocabImportRows.related, "دببة")));
     await lexicon.editRow(getDb(), row.id, { related: "دُبّة" }, "أنثى الدب: دُبّة");

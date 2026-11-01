@@ -11,7 +11,7 @@ import { getTaxonomy } from "@/features/curriculum/service";
 import { RELATION_TEXT, type RelationType } from "@/features/lexicon/mapping";
 import { lexiconStats } from "@/features/lexicon/service";
 import { cn } from "@/lib/utils";
-import { AcceptCleanButton, BankWordForm, ImportDatasetForm, LemmaForm, MergeForm, RefreshBankWordsButton } from "./forms";
+import { AcceptCleanButton, BankWordForm, ImportDatasetForm, LemmaForm, MoveSenseForm, MergeForm, RefreshBankWordsButton } from "./forms";
 import { bankWordStats, listBankWords } from "@/features/bank-words/service";
 
 export const metadata = { title: "مكتبة الكلمات" };
@@ -243,7 +243,10 @@ export default async function LexiconAdmin({ searchParams }: { searchParams: Pro
                   <MergeForm sourceId={e.id} />
                 </div>
                 {senses.filter((s) => s.entryId === e.id).map((s) => (
-                  <p key={s.id} className="text-sm">{s.meaning}{s.example && <span className="text-muted"> — «{s.example}»</span>} <span className="text-muted text-xs">({(s.sources as { label?: string; rowNumber?: number }[]).map((x) => `${x.label ?? ""} #${x.rowNumber ?? ""}`).join("، ")})</span></p>
+                  <div key={s.id} className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm">{s.meaning}{s.example && <span className="text-muted"> — «{s.example}»</span>} <span className="text-muted text-xs">({(s.sources as { label?: string; rowNumber?: number }[]).map((x) => `${x.label ?? ""} #${x.rowNumber ?? ""}`).join("، ")})</span></p>
+                    <MoveSenseForm senseId={s.id} />
+                  </div>
                 ))}
                 <p className="text-muted text-xs">
                   {rels.filter((r) => r.from === e.id || r.to === e.id).map((r) => `${names.get(r.from)} ← ${RELATION_TEXT[r.type as RelationType]?.label ?? r.type} → ${names.get(r.to)}`).join(" · ")}
