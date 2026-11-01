@@ -1,14 +1,18 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { memoryAttemptAction } from "@/features/games/actions";
 import type { ClientRound } from "@/features/games/types";
 import { cn, seededRandom, shuffle, hashString } from "@/lib/utils";
 
 type Card = { key: string; text: string; side: "word" | "pair"; round: number; choiceId: string };
 
-/** ذاكرة لفظي: flip two cards; a word + its pair stays open. Mistakes only lower the score. */
+/**
+ * ذاكرة لفظي: a short look at every card first, then flip two at a time; a word + its pair stays open.
+ * A wrong pair only counts as a mistake when the student had already flipped both cards before
+ * (a real memory slip) — exploring an unseen card is free.
+ */
 export function MemoryBoard({ sessionId, rounds, mistakes, onMatched, onMistake, onError }: { sessionId: string; rounds: ClientRound[]; mistakes: number; onMatched: (i: number, choiceId: string, points: number) => void; onMistake: (n: number) => void; onError: (e: string | null) => void }) {
   const cards = useMemo<Card[]>(() => {
     const all: Card[] = [
@@ -21,24 +25,39 @@ export function MemoryBoard({ sessionId, rounds, mistakes, onMatched, onMistake,
   const matchedPairs = new Set(rounds.filter((r) => r.answered).map((r) => r.answered!.choiceId));
   const [open, setOpen] = useState<string[]>([]);
   const [pending, start] = useTransition();
+  // Preview: every card face-up for a few seconds at the start of a fresh board.
+  const fresh = matchedWords.size === 0 && mistakes === 0;
+  const previewSecs = Math.min(10, 4 + Math.ceil(cards.length / 3));
+  const [left, setLeft] = useState(fresh ? previewSecs : 0);
+  useEffect(() => {
+    if (left <= 0) return;
+    const t = setTimeout(() => setLeft((x) => x - 1), 1000);
+    return () => clearTimeout(t);
+  }, [left]);
+  const previewing = left > 0;
+  // Cards the student has flipped themselves (the preview doesn't count).
+  const seen = useRef(new Set<string>());
 
-  const isOpen = (c: Card) => open.includes(c.key) || (c.side === "word" ? matchedWords.has(c.round) : matchedPairs.has(c.choiceId));
+  const isOpen = (c: Card) => previewing || open.includes(c.key) || (c.side === "word" ? matchedWords.has(c.round) : matchedPairs.has(c.choiceId));
 
   const flip = (c: Card) => {
-    if (pending || isOpen(c) || open.length >= 2) return;
+    if (previewing || pending || isOpen(c) || open.length >= 2) return;
     const next = [...open, c.key];
     setOpen(next);
     if (next.length < 2) return;
     const [a, b] = next.map((k) => cards.find((x) => x.key === k)!);
+    const counted = seen.current.has(a.key) && seen.current.has(b.key);
+    seen.current.add(a.key);
+    seen.current.add(b.key);
     const word = a.side === "word" ? a : b.side === "word" ? b : null;
     const pair = a.side === "pair" ? a : b.side === "pair" ? b : null;
     if (!word || !pair) {
-      onMistake(mistakes + 1);
+      if (counted) onMistake(mistakes + 1);
       setTimeout(() => setOpen([]), 700);
       return;
     }
     start(async () => {
-      const res = await memoryAttemptAction({ sessionId, round: word.round, choiceId: pair.choiceId });
+      const res = await memoryAttemptAction({ sessionId, round: word.round, choiceId: pair.choiceId, counted });
       if (!res.ok) {
         onError(res.error);
         setOpen([]);
@@ -58,6 +77,12 @@ export function MemoryBoard({ sessionId, rounds, mistakes, onMatched, onMistake,
   return (
     <div className="space-y-3">
       <p className="text-center font-bold">{rounds[0]?.prompt}</p>
+      {previewing && (
+        <div className="bg-sky-soft flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm font-semibold">
+          <span>احفظ أماكن البطاقات… تنقلب بعد <span className="font-num">{left}</span></span>
+          <button type="button" onClick={() => setLeft(0)} className="text-primary-ink underline">ابدأ الآن</button>
+        </div>
+      )}
       <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
         {cards.map((c) => {
           const shown = isOpen(c);
@@ -76,7 +101,7 @@ export function MemoryBoard({ sessionId, rounds, mistakes, onMatched, onMistake,
           );
         })}
       </ul>
-      <p className="text-muted text-center text-xs">اقلب بطاقتين: كلمة وقرينتها. القلبات الخاطئة: <span className="font-num">{mistakes}</span></p>
+      <p className="text-muted text-center text-xs">اقلب بطاقتين: كلمة وقرينتها. أخطاء الذاكرة: <span className="font-num">{mistakes}</span> — أول قلبة لبطاقة لم تكشفها بعد لا تُحسب.</p>
     </div>
   );
 }

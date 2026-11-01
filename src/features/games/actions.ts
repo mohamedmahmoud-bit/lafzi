@@ -52,12 +52,12 @@ export async function answerRoundAction(input: { sessionId: string; round: numbe
   }, ERRORS);
 }
 
-export async function memoryAttemptAction(input: { sessionId: string; round: number; choiceId: string }) {
+export async function memoryAttemptAction(input: { sessionId: string; round: number; choiceId: string; counted?: boolean }) {
   return runAction(async () => {
     const user = await assertUser();
     await enforceRateLimit(`game_answer:${user.id}`, 120, 60);
-    const p = roundSchema.extend({ choiceId: z.string().min(1).max(64) }).parse(input);
-    return memoryAttempt(user.id, p.sessionId, p.round, p.choiceId);
+    const p = roundSchema.extend({ choiceId: z.string().min(1).max(64), counted: z.boolean().optional() }).parse(input);
+    return memoryAttempt(user.id, p.sessionId, p.round, p.choiceId, p.counted ?? true);
   }, ERRORS);
 }
 

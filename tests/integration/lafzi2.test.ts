@@ -227,6 +227,8 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     await playAll(a, m.id);
     const mem = await games.startGame(a, "memory");
     const mr = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, mem.id)))[0].rounds as { correctId: string }[];
+    const exploring = await games.memoryAttempt(a, mem.id, 0, mr[2].correctId, false); // first look at unseen cards: free
+    expect(exploring).toMatchObject({ matched: false, mistakes: 0 });
     const wrong = await games.memoryAttempt(a, mem.id, 0, mr[1].correctId);
     expect(wrong.matched).toBe(false);
     const right = await games.memoryAttempt(a, mem.id, 0, mr[0].correctId);

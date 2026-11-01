@@ -421,7 +421,11 @@ export async function answerRound(userId: string, sessionId: string, roundIndex:
  * ذاكرة لفظي: flip a word card and an answer card. A correct pair is recorded once; a wrong pair
  * only counts a mistake (memory games need retries), so it never locks the round.
  */
-export async function memoryAttempt(userId: string, sessionId: string, roundIndex: number, choiceId: string) {
+/**
+ * One memory pair attempt. `counted` is false when the student hadn't seen one of the two cards
+ * before (an exploring flip) — only a real memory slip lowers the score.
+ */
+export async function memoryAttempt(userId: string, sessionId: string, roundIndex: number, choiceId: string, counted = true) {
   return getDb().transaction(async (tx) => {
     await lockProfile(tx, userId);
     const [s] = await tx.select().from(gameSessions).where(and(eq(gameSessions.id, sessionId), eq(gameSessions.userId, userId))).for("update").limit(1);
@@ -432,6 +436,7 @@ export async function memoryAttempt(userId: string, sessionId: string, roundInde
     const [prior] = await tx.select().from(gameSessionAnswers).where(and(eq(gameSessionAnswers.sessionId, s.id), eq(gameSessionAnswers.roundIndex, roundIndex))).limit(1);
     if (prior) return { matched: true, points: 0, mistakes: s.mistakes };
     if (choiceId !== r.correctId) {
+      if (!counted) return { matched: false, points: 0, mistakes: s.mistakes };
       await tx.update(gameSessions).set({ mistakes: sql`${gameSessions.mistakes} + 1` }).where(eq(gameSessions.id, s.id));
       return { matched: false, points: 0, mistakes: s.mistakes + 1 };
     }
