@@ -10,6 +10,7 @@ import { isPlayable } from "@/features/games/session.service";
 import { getLevels, getXpRule } from "@/features/gamification/xp.service";
 import { levelFor } from "@/features/gamification/levels";
 import { getCohortBoard } from "@/features/leaderboard/service";
+import { getJourney } from "@/features/journey/service";
 import { loadLexicon } from "@/features/lexicon/content";
 import { MISSION_MINUTES, missionProgress } from "@/features/missions/config";
 import { listFriends, myChallenges } from "@/features/social/service";
@@ -49,6 +50,8 @@ export async function getDashboard(user: CurrentUser) {
       .groupBy(studentVocabularyProgress.state),
   ]);
   const cohort = await getCohortBoard(user, friends.map((f) => f.userId));
+  const jm = await getJourney(user.id);
+  const curStage = jm.current ? jm.stages.find((st) => st.levels.some((l) => l.number === jm.current!.number)) : null;
   const top = cohort.rows.slice(0, 5);
   const board = cohort.me && !top.some((r) => r.isMe) ? [...top.slice(0, 4), cohort.me] : top;
   const dailyPlayable = await isPlayable("daily_challenge");
@@ -59,6 +62,13 @@ export async function getDashboard(user: CurrentUser) {
   const mission = missionProgress({ wordOfDayCompleted: activity?.wordOfDayCompleted ?? false, dailySessionCompleted: activity?.dailyChallengeCompleted ?? false });
   const level = levelFor(profile.xpTotal, levels);
   return {
+    journey: {
+      current: jm.current,
+      stagePassed: curStage?.passed ?? 0,
+      stageTotal: curStage?.levels.length ?? 0,
+      passed: jm.passedLevels,
+      total: jm.totalLevels,
+    },
     today,
     name: profile.officialFullName ?? profile.displayName,
     avatar: profile.avatar,

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { assertUser } from "@/features/auth/dal";
 import { runAction } from "@/lib/action-result";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { answerRound, completeGame, GameError, memoryAttempt, startGame, useHint } from "./session.service";
+import { answerRound, completeGame, GameError, memoryAttempt, startGame, startLevel, useHint } from "./session.service";
 
 const ERRORS = {
   unknown_game: "لعبة غير معروفة.",
@@ -17,6 +17,7 @@ const ERRORS = {
   incomplete: "أكمل كل الأسئلة أولًا.",
   answered: "أجبت عن هذا بالفعل.",
   time_up: "انتهى الوقت!",
+  locked: "اجتز المستويات السابقة أولًا.",
 };
 
 const REL = z.enum(["synonym", "antonym", "sound", "animal_young", "animal_home", "plural", "verb_present", "animal_female"]);
@@ -36,6 +37,21 @@ export async function startGameAction(form: FormData) {
     }));
   } catch (e) {
     if (e instanceof GameError) redirect(`/play/${gameId}?error=${e.code}`);
+    throw e;
+  }
+  redirect(`/play/session/${id}`);
+}
+
+/** «رحلة لفظي»: start (or resume) a level and open it. */
+export async function startLevelAction(form: FormData) {
+  const user = await assertUser();
+  await enforceRateLimit(`game_start:${user.id}`, 30, 60);
+  const number = z.coerce.number().int().min(1).max(100000).parse(form.get("level"));
+  let id: string;
+  try {
+    ({ id } = await startLevel(user.id, number));
+  } catch (e) {
+    if (e instanceof GameError) redirect(`/journey?error=${e.code}`);
     throw e;
   }
   redirect(`/play/session/${id}`);

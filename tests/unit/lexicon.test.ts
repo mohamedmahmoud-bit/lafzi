@@ -221,3 +221,38 @@ describe("practising one category (dictionary fallback)", () => {
     for (const r of rounds) for (const ch of r.choices) expect(lx.entries.get(owner.get(ch.id)!)!.categories).toContain("vo_qudurat");
   });
 });
+
+import { planNewLevels, starsFor, passMark, REVIEW_EVERY } from "@/features/journey/plan";
+describe("رحلة لفظي — the path", () => {
+  it("orders stages, puts a review at every 5th level, and keeps 5–14 words per learn level", () => {
+    const lx = datasetLexicon();
+    const plan = planNewLevels(lx, []);
+    expect(plan.length).toBeGreaterThan(20);
+    expect(plan.map((l) => l.number)).toEqual(plan.map((_, i) => i + 1));
+    for (const l of plan) {
+      if (l.number % REVIEW_EVERY === 0) expect(l.kind).toBe("review");
+      else {
+        expect(l.kind).toBe("learn");
+        expect(l.entryIds.length).toBeGreaterThanOrEqual(5);
+        expect(l.entryIds.length).toBeLessThan(15);
+      }
+    }
+    const order = ["warmup", "synonyms", "animals", "qudurat"];
+    const stages = plan.map((l) => order.indexOf(l.stage));
+    expect([...stages].sort((a, b) => a - b)).toEqual(stages);
+  });
+  it("is append-only: an existing path gets nothing new, and new words land at the end", () => {
+    const lx = datasetLexicon();
+    const plan = planNewLevels(lx, []);
+    expect(planNewLevels(lx, plan)).toEqual([]);
+    // Pretend the last qudurat level didn't exist yet: its words come back as levels after the path.
+    const withoutLast = plan.filter((l) => l !== plan.filter((x) => x.categoryId === "vo_qudurat").at(-1));
+    const added = planNewLevels(lx, withoutLast);
+    expect(added.length).toBeGreaterThan(0);
+    expect(Math.min(...added.map((l) => l.number))).toBeGreaterThan(Math.max(...withoutLast.map((l) => l.number)));
+  });
+  it("passes at 6 of 8 with stars 1–3", () => {
+    expect(passMark(8)).toBe(6);
+    expect([5, 6, 7, 8].map((c) => starsFor(c, 8))).toEqual([0, 1, 2, 3]);
+  });
+});

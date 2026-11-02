@@ -20,6 +20,7 @@ export type GameDef = {
 };
 
 export const GAMES: GameDef[] = [
+  { id: "journey", nameAr: "رحلة لفظي", topicId: "vocabulary", tagline: "مستوى بعد مستوى", description: "مستويات قصيرة من ٨ أسئلة: اجتز ٦ لتفتح المستوى التالي.", status: "live", source: "lexicon", section: "hidden", mechanic: "mcq", icon: "target", minutes: 2, sort: -1 },
   { id: "meaning_hunter", nameAr: "صائد المعاني", topicId: "vocabulary", tagline: "شوف الكلمة واختر معناها", description: "كلمات وأسئلة معتمدة من فريق لفظي — اختر المعنى الصحيح.", status: "live", source: "lexicon", section: "play", mechanic: "mcq", icon: "target", minutes: 2, sort: 1 },
   { id: "match_pairs", nameAr: "وصلها صح", topicId: "vocabulary", tagline: "صِل كل كلمة بقرينتها", description: "أصوات، صغار، مساكن، جموع، مرادفات وأضداد — صِل الأزواج كلها.", status: "live", source: "lexicon", section: "play", mechanic: "match", icon: "link", minutes: 2, sort: 2 },
   { id: "word_race", nameAr: "سباق الكلمات", topicId: "vocabulary", tagline: "٧٥ ثانية… كم سؤالًا تلحق؟", description: "كلمات ومعانٍ ضد الوقت: الدقة أولًا، والسرعة تضيف نقاطًا.", status: "live", source: "lexicon", section: "play", mechanic: "race", icon: "timer", minutes: 2, sort: 3 },

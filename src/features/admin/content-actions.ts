@@ -27,6 +27,7 @@ import * as lexicon from "@/features/lexicon/service";
 import * as teacherQ from "@/features/questions/service";
 import * as bankWords from "@/features/bank-words/service";
 import * as media from "@/features/media/service";
+import { syncJourney } from "@/features/journey/service";
 import { parseTime } from "@/features/media/parse";
 import { approveCorroborated, approveMeaning, decideEntry, decideRelationship, runVocabularyExtraction } from "@/features/word-bank/service";
 import { isProduction } from "@/lib/env";
@@ -374,7 +375,10 @@ export async function acceptCleanBatchAction(): Promise<{ ok: true; accepted: nu
     const accepted = await lexicon.acceptAllClean(getDb(), admin.id, undefined, 40);
     if (accepted) await audit({ actorUserId: admin.id, action: "lexicon.bulk_accept_clean", metadata: { count: accepted } });
     const remaining = await lexicon.countClean(getDb());
-    if (!remaining) revalidatePath("/admin/lexicon");
+    if (!remaining) {
+      await syncJourney(getDb());
+      revalidatePath("/admin/lexicon");
+    }
     return { ok: true, accepted, remaining };
   } catch (e) {
     console.error("[lexicon bulk accept]", e);
@@ -487,6 +491,7 @@ export async function approveBankWordAction(_prev: ActionState, form: FormData):
       reviewerId: admin.id,
     });
     await audit({ actorUserId: admin.id, action: "bank_words.approve", entityType: "bank_word_candidate", entityId: id });
+    await syncJourney(getDb());
     revalidatePath("/admin/lexicon");
     return { ok: true, message: "اعتُمدت الكلمة" };
   } catch (e) {

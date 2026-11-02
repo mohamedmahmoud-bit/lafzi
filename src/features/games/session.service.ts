@@ -8,6 +8,7 @@ import {
   competitions,
   gameSessionAnswers,
   gameSessions,
+  journeyLevels,
   gameTypes,
   skillProgress,
   studentDailyActivity,
@@ -34,9 +35,10 @@ import { gameById, type GameDef } from "./modes";
 import type { ClientRound, GameSummary, Round, SubskillResult } from "./types";
 import { boardRounds, meaningRounds, playableTypes, relationForCategory, relationRounds } from "./vocab-builders";
 import { publishedTeacherQuestions, type TeacherQuestion } from "@/features/questions/service";
+import { currentLevel, levelRounds, recordLevelResult } from "@/features/journey/service";
 
 export class GameError extends Error {
-  constructor(public code: "unknown_game" | "not_live" | "content_unavailable" | "not_found" | "not_in_progress" | "bad_round" | "incomplete" | "answered" | "time_up") {
+  constructor(public code: "unknown_game" | "not_live" | "locked" | "content_unavailable" | "not_found" | "not_in_progress" | "bad_round" | "incomplete" | "answered" | "time_up") {
     super(code);
   }
 }
@@ -207,7 +209,7 @@ export const isPlayable = async (gameId: string) => {
   return !!g && (await availableRounds(gameId)) >= minRoundsFor(g);
 };
 
-async function insertSession(userId: string, g: GameDef, rounds: Round[], p: { timed: boolean; kind: string; challengeId?: string | null; categoryId?: string | null }) {
+async function insertSession(userId: string, g: GameDef, rounds: Round[], p: { timed: boolean; kind: string; challengeId?: string | null; categoryId?: string | null; levelId?: string | null }) {
   const now = new Date();
   const [s] = await getDb()
     .insert(gameSessions)
@@ -218,6 +220,7 @@ async function insertSession(userId: string, g: GameDef, rounds: Round[], p: { t
       kind: p.kind,
       challengeId: p.challengeId ?? null,
       categoryId: p.categoryId ?? null,
+      levelId: p.levelId ?? null,
       deadlineAt: g.mechanic === "race" ? new Date(now.getTime() + RACE_MS) : null,
       day: learningDay(),
       rounds: rounds as unknown as Record<string, unknown>[],
@@ -271,6 +274,30 @@ export async function startGame(userId: string, gameId: string, opts: { timed?: 
   return { id, created: true };
 }
 
+/**
+ * «رحلة لفظي»: start (or resume) a level. Levels open in order — any passed level can be replayed,
+ * plus the first one not yet passed.
+ */
+export async function startLevel(userId: string, number: number) {
+  const db = getDb();
+  const g = gameById("journey")!;
+  const [level] = await db.select().from(journeyLevels).where(eq(journeyLevels.number, number)).limit(1);
+  if (!level) throw new GameError("not_found");
+  const cur = await currentLevel(db, userId);
+  if (cur && level.number > cur.number) throw new GameError("locked");
+  const [open] = await db
+    .select({ id: gameSessions.id })
+    .from(gameSessions)
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessions.levelId, level.id), eq(gameSessions.status, "in_progress"), eq(gameSessions.day, learningDay())))
+    .limit(1);
+  if (open) return { id: open.id, created: false };
+  const lx = (await loadGameContent()).lx;
+  const rounds = await levelRounds(db, userId, level, lx, seededRandom(hashString(`${userId}:level:${level.number}:${Date.now()}`)));
+  if (rounds.length < MIN_ROUNDS) throw new GameError("content_unavailable");
+  const id = await insertSession(userId, g, rounds, { timed: false, kind: "level", categoryId: level.categoryId, levelId: level.id });
+  return { id, created: true };
+}
+
 /** Start a session on a frozen round set (friend challenges). */
 export async function startFrozenSession(userId: string, gameId: string, rounds: Round[], challengeId: string) {
   const g = gameById(gameId);
@@ -285,6 +312,8 @@ export type GameView = {
   kind: string;
   challengeId: string | null;
   categoryId: string | null;
+  /** «رحلة لفظي» level number (level sessions only). */
+  level: number | null;
   status: string;
   timed: boolean;
   roundMs: number;
@@ -327,6 +356,7 @@ export async function getGameView(userId: string, sessionId: string): Promise<Ga
     kind: s.kind,
     challengeId: s.challengeId,
     categoryId: s.categoryId,
+    level: s.levelId ? ((await db.select({ n: journeyLevels.number }).from(journeyLevels).where(eq(journeyLevels.id, s.levelId)).limit(1))[0]?.n ?? null) : null,
     status: s.status,
     timed: s.timed,
     roundMs: TIMED_ROUND_MS,
@@ -520,6 +550,14 @@ export async function completeGame(userId: string, sessionId: string): Promise<G
       weakest: weakest && weakest.correct < weakest.total ? { subskillId: weakest.subskillId, nameAr: weakest.nameAr } : null,
       improved: results.filter((r) => r.masteryAfter > r.masteryBefore).map((r) => ({ subskillId: r.subskillId, nameAr: r.nameAr, delta: r.masteryAfter - r.masteryBefore })),
     };
+
+    if (s.levelId) {
+      const level = await recordLevelResult(tx, userId, s.levelId, correct, s.plannedRounds);
+      if (level) {
+        summary.level = level;
+        if (level.firstPass) await awardXp(tx, { userId, action: "level_passed", idempotencyKey: `level_passed:${userId}:${s.levelId}`, day, sourceId: s.id }, rewards);
+      }
+    }
 
     await ensureDailyActivity(tx, userId, day);
     await tx

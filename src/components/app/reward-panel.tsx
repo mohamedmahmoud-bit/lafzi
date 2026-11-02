@@ -17,6 +17,7 @@ const ACTION_LABELS: Record<XpAction, string> = {
   noon_practice_clicked: "التدريب على نون",
   streak_milestone: "إنجاز السلسلة",
   game_completed: "إنهاء جولة",
+  level_passed: "اجتياز مستوى جديد",
   daily_challenge: "تحدي اليوم",
   word_mastered: "إتقان كلمة",
   challenge_completed: "تحدي صاحبك",

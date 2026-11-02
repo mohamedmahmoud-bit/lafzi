@@ -205,7 +205,7 @@ export function relationRound(lx: Lexicon, rel: LexRelation, rand: Rand): Round 
 /** n relation questions of one type (one per left word), due words first. */
 export function relationRounds(lx: Lexicon, type: RelationType, p: { n: number } & Pick): Round[] {
   const byFrom = new Map<string, LexRelation>();
-  for (const r of shuffle(lx.relations.filter((x) => x.type === type), p.rand)) if (!byFrom.has(r.fromId)) byFrom.set(r.fromId, r);
+  for (const r of shuffle(lx.relations.filter((x) => x.type === type && (!p.onlyEntries || p.onlyEntries.includes(x.fromId))), p.rand)) if (!byFrom.has(r.fromId)) byFrom.set(r.fromId, r);
   const pool = orderPool(lx, [...byFrom.values()].map((r) => ({ entryId: r.fromId, r })), p.n, p);
   const out: Round[] = [];
   for (const { r } of pool) {

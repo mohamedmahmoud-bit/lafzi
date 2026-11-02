@@ -747,6 +747,8 @@ export const gameSessions = pgTable(
     deadlineAt: timestamp("deadline_at", { withTimezone: true }),
     /** Memory game: wrong flips. */
     mistakes: integer("mistakes").notNull().default(0),
+    /** «رحلة لفظي»: the journey level this round set belongs to. */
+    levelId: uuid("level_id"),
     status: text("status").notNull().default("in_progress"), // in_progress | completed | abandoned
     day: day().notNull(),
     /** Server-only round snapshots incl. answer keys and the exact question version. */
@@ -1445,4 +1447,41 @@ export const entryMedia = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("entry_media_entry_url_uq").on(t.entryId, t.kind, t.url), index().on(t.status), index().on(t.entryId, t.status)],
+);
+
+// ─── «رحلة لفظي»: one path of short levels built from the approved dictionary ─────────────
+
+export const journeyLevels = pgTable(
+  "journey_levels",
+  {
+    id: id(),
+    /** Position on the path (1-based). Append-only: existing levels never move. */
+    number: integer("number").notNull(),
+    stage: text("stage").notNull(),
+    /** Vocabulary category of a learn level (null for review levels). */
+    categoryId: text("category_id"),
+    kind: text("kind").notNull().default("learn"), // learn | review
+    /** The words a learn level teaches (entries; for pair categories, the left word of each pair). */
+    entryIds: jsonb("entry_ids").$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("journey_levels_number_uq").on(t.number)],
+);
+
+export const studentLevelProgress = pgTable(
+  "student_level_progress",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    levelId: uuid("level_id")
+      .notNull()
+      .references(() => journeyLevels.id, { onDelete: "cascade" }),
+    stars: smallint("stars").notNull().default(0),
+    bestCorrect: integer("best_correct").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    passedAt: timestamp("passed_at", { withTimezone: true }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.levelId] })],
 );

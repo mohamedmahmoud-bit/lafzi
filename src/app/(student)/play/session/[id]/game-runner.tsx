@@ -13,7 +13,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardHint } from "@/components/ui/card";
 import { Num } from "@/components/ui/num";
 import { Progress } from "@/components/ui/progress";
-import { answerRoundAction, completeGameAction, hintAction, startGameAction } from "@/features/games/actions";
+import { answerRoundAction, completeGameAction, hintAction, startGameAction, startLevelAction } from "@/features/games/actions";
 import type { GameView } from "@/features/games/session.service";
 import type { ClientRound, GameSummary } from "@/features/games/types";
 import type { RewardSummary } from "@/features/gamification/rewards";
@@ -69,7 +69,7 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center gap-3">
-        <Link href={`/play/${game.id === "daily_challenge" ? "" : game.id}`} aria-label="خروج" className="text-muted hover:bg-surface-muted grid size-10 place-items-center rounded-full">
+        <Link href={view.level ? "/journey" : `/play/${game.id === "daily_challenge" ? "" : game.id}`} aria-label="خروج" className="text-muted hover:bg-surface-muted grid size-10 place-items-center rounded-full">
           <X aria-hidden className="size-5" />
         </Link>
         <Progress value={answered} max={rounds.length} label="الأسئلة المجاب عنها" className="h-3" barClassName="bg-mint" />
@@ -83,7 +83,7 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
         </span>
       </div>
       <p className="text-center text-sm font-bold">
-        {game.nameAr}
+        {view.level ? `رحلة لفظي · المستوى ${view.level}` : game.nameAr}
         {view.kind === "challenge" && <span className="text-grape"> · تحدي صاحب</span>}
         {view.categoryId && subskillNames[view.categoryId] && <span className="text-sky"> · {subskillNames[view.categoryId]}</span>}
       </p>
@@ -251,7 +251,12 @@ function Results({ summary, game, challengeCode, kind, categoryId }: { summary: 
   const router = useRouter();
   if (!summary) return null;
   const pct = Math.round(summary.accuracy * 100);
-  const cheer = pct >= 90 ? "أسطوري!" : pct >= 70 ? "ممتاز!" : pct >= 50 ? "أحسنت!" : "بداية جيدة — جولة ثانية وتتحسّن";
+  const lv = summary.level;
+  const cheer = lv
+    ? lv.passed
+      ? `المستوى ${lv.number} ✓`
+      : `لم تجتز المستوى ${lv.number} بعد`
+    : pct >= 90 ? "أسطوري!" : pct >= 70 ? "ممتاز!" : pct >= 50 ? "أحسنت!" : "بداية جيدة — جولة ثانية وتتحسّن";
 
   const challenge = () =>
     start(async () => {
@@ -271,6 +276,12 @@ function Results({ summary, game, challengeCode, kind, categoryId }: { summary: 
         {pct >= 70 && <Confetti />}
         <p className="text-muted text-sm">{game.nameAr}</p>
         <h1 className="font-display text-3xl font-bold">{cheer}</h1>
+        {lv?.passed && (
+          <p className="mt-1 text-4xl tracking-widest" aria-label={`${lv.stars} من ٣ نجوم`}>
+            {[1, 2, 3].map((i) => <span key={i} className={i <= lv.stars ? "text-sun" : "text-border"}>★</span>)}
+          </p>
+        )}
+        {lv && !lv.passed && <p className="text-muted mt-1 text-sm">تحتاج <Num value={lv.passMark} /> إجابات صحيحة من <Num value={summary.total} /> — الكلمات نفسها تنتظرك، حاول مرة أخرى.</p>}
         <div className="mt-4 grid grid-cols-3 gap-2">
           <Stat label="النقاط" value={<Num value={summary.score} />} tone="bg-sun-soft" />
           <Stat label="الدقة" value={<><Num value={pct} />٪</>} tone="bg-mint-soft" />
@@ -288,14 +299,23 @@ function Results({ summary, game, challengeCode, kind, categoryId }: { summary: 
 
       {summary.total > summary.correct && <CardHint className="text-center">الكلمات التي أخطأت فيها ستعود لك قريبًا للمراجعة.</CardHint>}
 
-      {/* One obvious next step: keep going in the same game (and category). */}
-      <form action={startGameAction}>
-        <input type="hidden" name="gameId" value={game.id === "daily_challenge" ? "meaning_hunter" : game.id} />
-        {categoryId && game.id !== "daily_challenge" && <input type="hidden" name="category" value={categoryId} />}
-        <Button size="lg" block className="h-16 text-xl">
-          {game.id === "daily_challenge" ? "العب جولة في صائد المعاني" : "الجولة التالية"} <ChevronLeft aria-hidden className="size-6" />
-        </Button>
-      </form>
+      {/* One obvious next step: the next level (or a retry), otherwise keep going in the same game. */}
+      {lv ? (
+        <form action={startLevelAction}>
+          <input type="hidden" name="level" value={lv.nextNumber ?? lv.number} />
+          <Button size="lg" block className="h-16 text-xl" disabled={lv.passed && lv.nextNumber === null}>
+            {!lv.passed ? "حاول مرة أخرى" : lv.nextNumber ? `المستوى ${lv.nextNumber}` : "أنهيت كل المستويات! 🎉"} <ChevronLeft aria-hidden className="size-6" />
+          </Button>
+        </form>
+      ) : (
+        <form action={startGameAction}>
+          <input type="hidden" name="gameId" value={game.id === "daily_challenge" ? "meaning_hunter" : game.id} />
+          {categoryId && game.id !== "daily_challenge" && <input type="hidden" name="category" value={categoryId} />}
+          <Button size="lg" block className="h-16 text-xl">
+            {game.id === "daily_challenge" ? "العب جولة في صائد المعاني" : "الجولة التالية"} <ChevronLeft aria-hidden className="size-6" />
+          </Button>
+        </form>
+      )}
 
       <div className="grid gap-2 sm:grid-cols-2">
         {game.canChallenge && kind !== "challenge" && (
@@ -303,8 +323,8 @@ function Results({ summary, game, challengeCode, kind, categoryId }: { summary: 
             <Share2 aria-hidden className="size-5" /> {pending ? "لحظة…" : "تحدَّ صاحبك"}
           </Button>
         )}
-        <ButtonLink href="/play" size="lg" variant="outline" block>
-          <RotateCcw aria-hidden className="size-4" /> لعبة أخرى
+        <ButtonLink href={lv ? "/journey" : "/play"} size="lg" variant="outline" block>
+          <RotateCcw aria-hidden className="size-4" /> {lv ? "خريطة الرحلة" : "لعبة أخرى"}
         </ButtonLink>
         <ButtonLink href="/" variant="ghost" block>
           <Flame aria-hidden className="text-flame size-4" /> الرئيسية

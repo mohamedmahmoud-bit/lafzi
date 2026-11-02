@@ -19,6 +19,8 @@ async function main() {
   const { refreshBankWords } = await import("../features/bank-words/service");
   const bw = await refreshBankWords(db);
   console.log(`  bank word candidates: ${bw.candidates} from ${bw.questions} bank questions`);
+  const { syncJourney } = await import("../features/journey/service");
+  console.log(`  journey: ${await syncJourney(db)} new level(s)`);
 
   // New students join the first cohort (until Noon exposes class/program membership).
   const [{ n }] = (await db.execute(sql`select count(*)::int as n from cohorts`)).rows as { n: number }[];

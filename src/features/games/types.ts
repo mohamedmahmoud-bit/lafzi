@@ -36,4 +36,6 @@ export type GameSummary = {
   subskills: SubskillResult[];
   weakest: { subskillId: string; nameAr: string } | null;
   improved: { subskillId: string; nameAr: string; delta: number }[];
+  /** «رحلة لفظي» level outcome (level sessions only). */
+  level?: { number: number; kind: string; passed: boolean; stars: number; passMark: number; firstPass: boolean; nextNumber: number | null };
 };

@@ -384,4 +384,28 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(done.rewards.awards.map((x) => x.action)).not.toContain("game_completed");
     expect(done.rewards.capped).toContain("game_completed");
   });
+  it("رحلة لفظي: levels open in order, pass at 6/8 with stars, first pass earns level XP once", async () => {
+    const journey = await import("@/features/journey/service");
+    expect(await journey.syncJourney(getDb())).toBeGreaterThan(10);
+    expect(await journey.syncJourney(getDb())).toBe(0); // append-only, idempotent
+    const [cohort] = await getDb().select().from(s.cohorts).limit(1);
+    const d = await mkUser("noon-d", "سلمى خالد", cohort.id);
+    await expect(games.startLevel(d, 2)).rejects.toMatchObject({ code: "locked" });
+    const l1 = await games.startLevel(d, 1);
+    const rounds = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, l1.id)))[0].rounds as { kind: string }[];
+    expect(rounds).toHaveLength(8);
+    const done = await playAll(d, l1.id);
+    expect(done.level).toMatchObject({ number: 1, passed: true, stars: 3, firstPass: true, nextNumber: 2 });
+    expect(done.rewards.awards.map((x) => x.action)).toContain("level_passed");
+    // Replaying a passed level never pays the level XP again.
+    const again = await playAll(d, (await games.startLevel(d, 1)).id);
+    expect(again.rewards.awards.map((x) => x.action)).not.toContain("level_passed");
+    // Failing level 2 keeps it as the next step.
+    const fail = await playAll(d, (await games.startLevel(d, 2)).id, false);
+    expect(fail.level).toMatchObject({ number: 2, passed: false, stars: 0, nextNumber: 2 });
+    await expect(games.startLevel(d, 3)).rejects.toMatchObject({ code: "locked" });
+    const map = await journey.getJourney(d);
+    expect(map.current?.number).toBe(2);
+    expect(map.passedLevels).toBe(1);
+  });
 });

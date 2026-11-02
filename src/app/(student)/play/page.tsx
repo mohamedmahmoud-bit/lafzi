@@ -1,7 +1,6 @@
-import { ChevronLeft, Zap } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { GameIcon } from "@/components/game/game-icon";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Num } from "@/components/ui/num";
 import { Pill } from "@/components/ui/pill";
@@ -9,7 +8,6 @@ import { getDb } from "@/db/client";
 import { entryCategories, vocabularyEntries } from "@/db/schema";
 import { requireUser } from "@/features/auth/dal";
 import { getTaxonomy } from "@/features/curriculum/service";
-import { startGameAction } from "@/features/games/actions";
 import { categoryHref } from "@/features/games/links";
 import { PLAY_GAMES } from "@/features/games/modes";
 import { isPlayable } from "@/features/games/session.service";
@@ -28,7 +26,6 @@ export default async function PlayHub() {
     .where(and(eq(vocabularyEntries.status, "approved"), isNull(vocabularyEntries.mergedInto)))
     .groupBy(entryCategories.categoryId);
   const count = new Map(counts.map((c) => [c.c, c.n]));
-  const anyPlayable = games.some((g) => g.playable);
 
   return (
     <div className="space-y-6">
@@ -37,13 +34,15 @@ export default async function PlayHub() {
           <h1 className="font-display text-3xl font-bold">العب</h1>
           <p className="text-muted">جولات قصيرة، كلمات حقيقية، ونقاط على كل إجابة صحيحة.</p>
         </div>
-        {anyPlayable && (
-          <form action={startGameAction}>
-            <input type="hidden" name="gameId" value={games.find((g) => g.playable)!.id} />
-            <Button size="lg" className="bg-flame text-white"><Zap aria-hidden className="size-5" /> لعب سريع</Button>
-          </form>
-        )}
       </header>
+      <Link href="/journey" className="bg-primary text-primary-foreground rounded-brand flex items-center justify-between gap-3 p-5">
+        <span>
+          <span className="font-display block text-2xl font-bold">رحلة لفظي</span>
+          <span className="text-sm opacity-90">مستوى بعد مستوى — الطريق الرئيسي لتعلّم كلمات القدرات</span>
+        </span>
+        <ChevronLeft aria-hidden className="size-6 shrink-0" />
+      </Link>
+      <h2 className="font-bold">ألعاب أخرى</h2>
 
       <ul className="grid gap-3 sm:grid-cols-2">
         {games.map((g) => (

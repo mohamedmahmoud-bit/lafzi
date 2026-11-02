@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronLeft, Circle, Flame, Play, Sparkles, Swords, Trophy, UserPlus, Zap } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Circle, Flame, Play, Sparkles, Swords, Trophy, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Avatar } from "@/components/app/brand-art";
 import { BadgeIcon } from "@/components/app/badge-icon";
@@ -10,8 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { analytics } from "@/features/analytics/analytics";
 import { requireUser } from "@/features/auth/dal";
 import { getDashboard, type DashboardData } from "@/features/dashboard/service";
-import { startGameAction } from "@/features/games/actions";
-import { categoryHref } from "@/features/games/links";
+import { startGameAction, startLevelAction } from "@/features/games/actions";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "الرئيسية" };
@@ -26,11 +25,11 @@ export default async function HomePage() {
     <div className="mx-auto grid max-w-5xl min-w-0 gap-4 lg:grid-cols-3">
       <div className="grid min-w-0 content-start gap-4 lg:col-span-2">
         {!d.gender && <GenderPrompt />}
+        <JourneyHero d={d} />
         <StreakHero d={d} />
         <Collection d={d} />
         <TodayChallenge d={d} />
         <QuickPlay d={d} />
-        <Categories d={d} />
       </div>
       <aside className="grid min-w-0 content-start gap-4">
         <FriendsCard d={d} />
@@ -110,20 +109,41 @@ function TodayChallenge({ d }: { d: DashboardData }) {
   );
 }
 
+/** The one obvious next step: continue the journey. */
+function JourneyHero({ d }: { d: DashboardData }) {
+  const j = d.journey;
+  if (!j.total) return null;
+  return (
+    <Card className="bg-primary text-primary-foreground space-y-3 border-0">
+      {j.current ? (
+        <>
+          <div className="flex items-end justify-between gap-2">
+            <div>
+              <p className="text-sm opacity-90">تابع رحلتك · {j.current.stageName}</p>
+              <p className="font-display text-3xl font-bold">المستوى <Num value={j.current.number} />{j.current.kind === "review" && <span className="text-base font-normal"> · مراجعة</span>}</p>
+            </div>
+            <Link href="/journey" className="text-sm font-semibold underline opacity-90">الخريطة</Link>
+          </div>
+          <Progress value={j.stagePassed} max={Math.max(1, j.stageTotal)} label={`تقدّمك في ${j.current.stageName}`} className="h-2 bg-white/25" barClassName="bg-white" />
+          <form action={startLevelAction}>
+            <input type="hidden" name="level" value={j.current.number} />
+            <Button size="lg" block className="text-primary-ink h-14 bg-white text-lg hover:bg-white/90"><Play aria-hidden className="size-5" /> ابدأ المستوى</Button>
+          </form>
+        </>
+      ) : (
+        <p className="font-display text-xl font-bold">أنهيت كل مستويات الرحلة 🎉</p>
+      )}
+    </Card>
+  );
+}
+
 function QuickPlay({ d }: { d: DashboardData }) {
-  const first = d.games.find((g) => g.playable);
   return (
     <section aria-labelledby="qp" className="min-w-0 space-y-2">
       <div className="flex items-center justify-between">
-        <h2 id="qp" className="font-bold">العب</h2>
+        <h2 id="qp" className="font-bold">ألعاب أخرى</h2>
         <Link href="/play" className="text-primary-ink text-sm font-semibold">كل الألعاب</Link>
       </div>
-      {first && (
-        <form action={startGameAction}>
-          <input type="hidden" name="gameId" value={first.id} />
-          <Button size="lg" block className="bg-sky h-14 text-lg text-white"><Zap aria-hidden className="size-5" /> لعب سريع — {first.nameAr}</Button>
-        </form>
-      )}
       <ul className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {d.games.map((g) => (
           <li key={g.id} className="w-36 shrink-0">
@@ -139,25 +159,6 @@ function QuickPlay({ d }: { d: DashboardData }) {
   );
 }
 
-const CAT_TONES = ["bg-sky-soft", "bg-mint-soft", "bg-sun-soft", "bg-grape-soft", "bg-rose-soft", "bg-flame-soft"];
-function Categories({ d }: { d: DashboardData }) {
-  if (!d.categories.length) return null;
-  return (
-    <section aria-labelledby="cats" className="space-y-2">
-      <h2 id="cats" className="font-bold">استكشف الأقسام</h2>
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {d.categories.map((c, i) => (
-          <li key={c.id}>
-            <Link href={categoryHref(c.id)} className={cn("block rounded-2xl p-3 transition active:scale-[0.98]", CAT_TONES[i % CAT_TONES.length])}>
-              <p className="font-bold">{c.nameAr}</p>
-              <p className="text-muted text-xs"><Num value={c.words} /> كلمة</p>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 
 function FriendsCard({ d }: { d: DashboardData }) {
   return (
