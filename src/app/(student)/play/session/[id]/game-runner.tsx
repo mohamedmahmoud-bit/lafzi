@@ -41,6 +41,7 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
   const allAnswered = answered === rounds.length;
   const update = (i: number, p: Partial<ClientRound>) => setRounds((rs) => rs.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const patch = (i: number, a: ClientRound["answered"]) => update(i, { answered: a });
+  const append = (r: ClientRound) => setRounds((rs) => (rs.some((x) => x.index === r.index) ? rs : [...rs, r]));
 
   const finish = useCallback(() => {
     if (finishing.current) return;
@@ -83,7 +84,13 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
         </span>
       </div>
       <p className="text-center text-sm font-bold">
-        {view.level ? `رحلة لفظي · المستوى ${view.level}` : game.nameAr}
+        {view.level
+          ? view.levelMode === "corrective"
+            ? `رحلة لفظي · مراجعة ما فاتك في اختبار المرحلة`
+            : view.levelKind === "test"
+              ? `رحلة لفظي · اختبار المرحلة (المستوى ${view.level})`
+              : `رحلة لفظي · المستوى ${view.level}${view.levelKind === "review" ? " · مراجعة" : ""}`
+          : game.nameAr}
         {view.kind === "challenge" && <span className="text-grape"> · تحدي صاحب</span>}
         {view.categoryId && subskillNames[view.categoryId] && <span className="text-sky"> · {subskillNames[view.categoryId]}</span>}
       </p>
@@ -106,7 +113,7 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
           />
         </Card>
       ) : (
-        <ChoiceRounds view={view} rounds={rounds} patch={patch} update={update} addScore={(p) => setScore((s) => s + p)} onError={setError} onFinish={finish} pending={pending} />
+        <ChoiceRounds view={view} rounds={rounds} patch={patch} update={update} append={append} addScore={(p) => setScore((s) => s + p)} onError={setError} onFinish={finish} pending={pending} />
       )}
     </div>
   );
@@ -123,7 +130,7 @@ const RACE_NEXT_AFTER_WRONG_MS = 1500;
  * Multiple-choice rounds (صائد المعاني، تحدي اليوم، السباق). A correct answer advances by itself;
  * after a mistake the right answer stays until «فهمت — التالي» (the race moves on by itself).
  */
-function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish, pending }: { view: GameView; rounds: ClientRound[]; patch: (i: number, a: ClientRound["answered"]) => void; update: (i: number, p: Partial<ClientRound>) => void; addScore: (p: number) => void; onError: (e: string | null) => void; onFinish: () => void; pending: boolean }) {
+function ChoiceRounds({ view, rounds, patch, update, append, addScore, onError, onFinish, pending }: { view: GameView; rounds: ClientRound[]; patch: (i: number, a: ClientRound["answered"]) => void; update: (i: number, p: Partial<ClientRound>) => void; append: (r: ClientRound) => void; addScore: (p: number) => void; onError: (e: string | null) => void; onFinish: () => void; pending: boolean }) {
   const race = view.mechanic === "race";
   const first = useMemo(() => {
     const i = view.rounds.findIndex((r) => !r.answered);
@@ -134,6 +141,7 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, start] = useTransition();
   const [flash, setFlash] = useState<"ok" | "no" | null>(null);
+  const [comesBack, setComesBack] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const r = rounds[index];
 
@@ -150,6 +158,7 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
       timer.current = null;
       setSelected(null);
       setFlash(null);
+      setComesBack(false);
       const n = rounds.findIndex((x, j) => j !== from && j !== answeredNow && !x.answered);
       if (n === -1) onFinish();
       else setIndex(n);
@@ -171,6 +180,10 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
       onError(null);
       addScore(res.data.points);
       patch(at, { choiceId, isCorrect: res.data.isCorrect, correctId: res.data.correctId, explanation: res.data.explanation, points: res.data.points, hintUsed: !!r.hintRemoved });
+      if (res.data.appended) {
+        append(res.data.appended);
+        setComesBack(true);
+      }
       setFlash(res.data.isCorrect ? "ok" : "no");
       if (res.data.isCorrect) timer.current = setTimeout(() => advance(at, at), NEXT_AFTER_CORRECT_MS);
       else if (race) timer.current = setTimeout(() => advance(at, at), RACE_NEXT_AFTER_WRONG_MS);
@@ -210,6 +223,7 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
               {r.answered.isCorrect ? <>صح! +<Num value={r.answered.points} /></> : "خطأ — الإجابة الصحيحة مظللة"}
             </p>
             {!r.answered.isCorrect && r.answered.explanation && <p className="text-muted text-sm">{r.answered.explanation}</p>}
+            {comesBack && <p className="bg-sky-soft text-sky rounded-xl px-3 py-2 text-sm font-semibold">🔁 ستعود لك هذه الكلمة بعد قليل — ركّز على الإجابة الصحيحة.</p>}
             {waitingAfterMistake && !race && (
               <Button size="lg" block className="mt-2" onClick={(e) => { e.stopPropagation(); advance(index, index); }}>
                 فهمت — التالي
@@ -253,9 +267,15 @@ function Results({ summary, game, challengeCode, kind, categoryId }: { summary: 
   const pct = Math.round(summary.accuracy * 100);
   const lv = summary.level;
   const cheer = lv
-    ? lv.passed
-      ? `المستوى ${lv.number} ✓`
-      : `لم تجتز المستوى ${lv.number} بعد`
+    ? lv.kind === "corrective"
+      ? "راجعت الكلمات التي فاتتك ✓"
+      : lv.kind === "test"
+        ? lv.passed
+          ? "اجتزت اختبار المرحلة ✓"
+          : "لم تجتز اختبار المرحلة بعد"
+        : lv.passed
+          ? `أتقنت المستوى ${lv.number} ✓`
+          : `لم تكمل المستوى ${lv.number} بعد`
     : pct >= 90 ? "أسطوري!" : pct >= 70 ? "ممتاز!" : pct >= 50 ? "أحسنت!" : "بداية جيدة — جولة ثانية وتتحسّن";
 
   const challenge = () =>
@@ -281,11 +301,26 @@ function Results({ summary, game, challengeCode, kind, categoryId }: { summary: 
             {[1, 2, 3].map((i) => <span key={i} className={i <= lv.stars ? "text-sun" : "text-border"}>★</span>)}
           </p>
         )}
-        {lv && !lv.passed && <p className="text-muted mt-1 text-sm">تحتاج <Num value={lv.passMark} /> إجابات صحيحة من <Num value={summary.total} /> — الكلمات نفسها تنتظرك، حاول مرة أخرى.</p>}
+        {lv?.kind === "test" && !lv.passed && (
+          <p className="text-muted mt-1 text-sm">
+            تحتاج <Num value={lv.passMark ?? 0} /> من <Num value={summary.total} /> لتفتح المرحلة التالية. راجع الكلمات التي فاتتك ثم أعد الاختبار.
+          </p>
+        )}
+        {lv?.kind === "corrective" && <p className="text-muted mt-1 text-sm">الآن أعد اختبار المرحلة لتفتح ما بعدها.</p>}
+        {lv && lv.kind !== "test" && lv.kind !== "corrective" && lv.passed && <p className="text-muted mt-1 text-sm">أجبت عن كل كلمات المستوى إجابة صحيحة.</p>}
         <div className="mt-4 grid grid-cols-3 gap-2">
           <Stat label="النقاط" value={<Num value={summary.score} />} tone="bg-sun-soft" />
-          <Stat label="الدقة" value={<><Num value={pct} />٪</>} tone="bg-mint-soft" />
-          <Stat label="صحيحة" value={<><Num value={summary.correct} /> من <Num value={summary.total} /></>} tone="bg-sky-soft" />
+          {lv && lv.kind !== "test" ? (
+            <>
+              <Stat label="من أول محاولة" value={<><Num value={lv.firstTry} /> من <Num value={lv.items} /></>} tone="bg-mint-soft" />
+              <Stat label="كلمات أتقنتها" value={<><Num value={lv.passed || lv.kind === "corrective" ? lv.items : lv.firstTry} /> من <Num value={lv.items} /></>} tone="bg-sky-soft" />
+            </>
+          ) : (
+            <>
+              <Stat label="الدقة" value={<><Num value={pct} />٪</>} tone="bg-mint-soft" />
+              <Stat label="صحيحة" value={<><Num value={summary.correct} /> من <Num value={summary.total} /></>} tone="bg-sky-soft" />
+            </>
+          )}
         </div>
       </Card>
 
@@ -301,12 +336,28 @@ function Results({ summary, game, challengeCode, kind, categoryId }: { summary: 
 
       {/* One obvious next step: the next level (or a retry), otherwise keep going in the same game. */}
       {lv ? (
-        <form action={startLevelAction}>
-          <input type="hidden" name="level" value={lv.nextNumber ?? lv.number} />
-          <Button size="lg" block className="h-16 text-xl" disabled={lv.passed && lv.nextNumber === null}>
-            {!lv.passed ? "حاول مرة أخرى" : lv.nextNumber ? `المستوى ${lv.nextNumber}` : "أنهيت كل المستويات! 🎉"} <ChevronLeft aria-hidden className="size-6" />
-          </Button>
-        </form>
+        <>
+          {lv.kind === "test" && !lv.passed && (lv.missed ?? 0) > 0 ? (
+            <form action={startLevelAction}>
+              <input type="hidden" name="level" value={lv.number} />
+              <input type="hidden" name="mode" value="corrective" />
+              <Button size="lg" block className="h-16 text-xl">راجع الكلمات التي فاتتك (<Num value={lv.missed ?? 0} />) <ChevronLeft aria-hidden className="size-6" /></Button>
+            </form>
+          ) : (
+            <form action={startLevelAction}>
+              <input type="hidden" name="level" value={lv.nextNumber ?? lv.number} />
+              <Button size="lg" block className="h-16 text-xl" disabled={lv.passed && lv.nextNumber === null}>
+                {lv.kind === "corrective" ? "أعد اختبار المرحلة" : !lv.passed ? (lv.kind === "test" ? "أعد الاختبار" : "حاول مرة أخرى") : lv.nextNumber ? `المستوى ${lv.nextNumber}` : "أنهيت كل المستويات! 🎉"} <ChevronLeft aria-hidden className="size-6" />
+              </Button>
+            </form>
+          )}
+          {lv.kind === "test" && !lv.passed && (lv.missed ?? 0) > 0 && (
+            <form action={startLevelAction}>
+              <input type="hidden" name="level" value={lv.number} />
+              <Button size="lg" variant="outline" block>أعد الاختبار مباشرة</Button>
+            </form>
+          )}
+        </>
       ) : (
         <form action={startGameAction}>
           <input type="hidden" name="gameId" value={game.id === "daily_challenge" ? "meaning_hunter" : game.id} />

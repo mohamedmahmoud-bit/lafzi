@@ -749,6 +749,8 @@ export const gameSessions = pgTable(
     mistakes: integer("mistakes").notNull().default(0),
     /** «رحلة لفظي»: the journey level this round set belongs to. */
     levelId: uuid("level_id"),
+    /** play = the level itself; corrective = re-teaching the words missed in a stage test. */
+    levelMode: text("level_mode").notNull().default("play"),
     status: text("status").notNull().default("in_progress"), // in_progress | completed | abandoned
     day: day().notNull(),
     /** Server-only round snapshots incl. answer keys and the exact question version. */
@@ -1481,6 +1483,8 @@ export const studentLevelProgress = pgTable(
     bestCorrect: integer("best_correct").notNull().default(0),
     attempts: integer("attempts").notNull().default(0),
     passedAt: timestamp("passed_at", { withTimezone: true }),
+    /** Stage tests: the words missed in the latest attempt ({categoryId, entryId}) for the corrective level. */
+    missed: jsonb("missed").$type<{ categoryId: string; entryId: string }[]>().notNull().default([]),
     updatedAt: updatedAt(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.levelId] })],

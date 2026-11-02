@@ -23,7 +23,8 @@ async function main() {
   console.log(`  bank word candidates: ${bw.candidates} from ${bw.questions} bank questions`);
   const { tagDerivedCategories } = await import("../features/lexicon/service");
   console.log(`  challenge sections: ${await tagDerivedCategories(db)} new tag(s)`);
-  const { syncJourney } = await import("../features/journey/service");
+  const { insertStageTests, syncJourney } = await import("../features/journey/service");
+  console.log(`  journey: stage tests inserted: ${await insertStageTests(db)}`);
   console.log(`  journey: ${await syncJourney(db)} new level(s)`);
 
   // New students join the first cohort (until Noon exposes class/program membership).

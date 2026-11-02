@@ -222,14 +222,15 @@ describe("practising one category (dictionary fallback)", () => {
   });
 });
 
-import { planNewLevels, starsFor, passMark, REVIEW_EVERY } from "@/features/journey/plan";
+import { planNewLevels, starsFor, testPassMark, REVIEW_EVERY } from "@/features/journey/plan";
 describe("رحلة لفظي — the path", () => {
-  it("orders stages, puts a review at every 5th level, and keeps 5–14 words per learn level", () => {
+  it("orders stages, reviews at every 5th level, a mastery test closes each stage, 5–14 words per learn level", () => {
     const lx = datasetLexicon();
     const plan = planNewLevels(lx, []);
     expect(plan.length).toBeGreaterThan(20);
     expect(plan.map((l) => l.number)).toEqual(plan.map((_, i) => i + 1));
     for (const l of plan) {
+      if (l.kind === "test") continue;
       if (l.number % REVIEW_EVERY === 0) expect(l.kind).toBe("review");
       else {
         expect(l.kind).toBe("learn");
@@ -237,7 +238,10 @@ describe("رحلة لفظي — the path", () => {
         expect(l.entryIds.length).toBeLessThan(15);
       }
     }
-    const order = ["warmup", "synonyms", "animals", "qudurat"];
+    // Every stage with 2+ levels ends with its test, right before the next stage starts.
+    for (const [i, l] of plan.entries()) if (plan[i + 1] && plan[i + 1].stage !== l.stage) expect(l.kind).toBe("test");
+    expect(plan.at(-1)!.kind).toBe("test");
+    const order = ["warmup", "synonyms", "animals", "qudurat", "challenges"];
     const stages = plan.map((l) => order.indexOf(l.stage));
     expect([...stages].sort((a, b) => a - b)).toEqual(stages);
   });
@@ -251,9 +255,9 @@ describe("رحلة لفظي — the path", () => {
     expect(added.length).toBeGreaterThan(0);
     expect(Math.min(...added.map((l) => l.number))).toBeGreaterThan(Math.max(...withoutLast.map((l) => l.number)));
   });
-  it("passes at 6 of 8 with stars 1–3", () => {
-    expect(passMark(8)).toBe(6);
-    expect([5, 6, 7, 8].map((c) => starsFor(c, 8))).toEqual([0, 1, 2, 3]);
+  it("stars measure the first try (the level itself needs every word right); tests pass at 90%", () => {
+    expect([10, 9, 8, 7, 3].map((c) => starsFor(c, 10))).toEqual([3, 2, 2, 1, 1]);
+    expect(testPassMark(15)).toBe(14);
   });
 });
 

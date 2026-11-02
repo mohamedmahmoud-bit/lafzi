@@ -49,7 +49,7 @@ export async function startLevelAction(form: FormData) {
   const number = z.coerce.number().int().min(1).max(100000).parse(form.get("level"));
   let id: string;
   try {
-    ({ id } = await startLevel(user.id, number));
+    ({ id } = await startLevel(user.id, number, form.get("mode") === "corrective" ? "corrective" : "play"));
   } catch (e) {
     if (e instanceof GameError) redirect(`/journey?error=${e.code}`);
     throw e;

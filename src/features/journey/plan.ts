@@ -21,16 +21,25 @@ export const WORDS_PER_LEVEL = 10;
 /** Smallest learn level worth playing (fewer new words wait for the next additions). */
 export const MIN_WORDS_PER_LEVEL = 5;
 export const REVIEW_EVERY = 5;
-export const ROUNDS_PER_LEVEL = 8;
-/** Pass with 6 of 8 (75%); stars: 6 → ★, 7 → ★★, 8 → ★★★. */
-export const passMark = (planned: number) => Math.ceil(planned * 0.75);
-export function starsFor(correct: number, planned: number) {
-  if (correct < passMark(planned)) return 0;
-  return correct >= planned ? 3 : correct >= planned - 1 ? 2 : 1;
+/** Review levels ask this many words. */
+export const REVIEW_WORDS = 8;
+/** Mastery loop: a wrong word comes back later in the level; the level never grows past this. */
+export const MAX_LEVEL_ROUNDS = 30;
+/**
+ * Mastery inside a level: the level is complete only when EVERY word was answered correctly.
+ * Stars measure the first try: all right → ★★★, 80%+ → ★★, otherwise ★.
+ */
+export function starsFor(firstTry: number, items: number) {
+  if (!items) return 0;
+  const r = firstTry / items;
+  return r >= 1 ? 3 : r >= 0.8 ? 2 : 1;
 }
+/** Stage mastery test: 15 mixed questions from the whole stage, 90% to open the next stage. */
+export const TEST_QUESTIONS = 15;
+export const testPassMark = (n: number) => Math.ceil(n * 0.9);
 
 export type ExistingLevel = { number: number; kind: string; categoryId: string | null; entryIds: string[] };
-export type PlannedLevel = { number: number; stage: string; categoryId: string | null; kind: "learn" | "review"; entryIds: string[] };
+export type PlannedLevel = { number: number; stage: string; categoryId: string | null; kind: "learn" | "review" | "test"; entryIds: string[] };
 
 /** The words a section teaches, easiest first: meanings (sections with meanings) or left words of pairs. */
 export function levelItems(lx: Lexicon, categoryId: string): string[] {
@@ -57,13 +66,17 @@ export function planNewLevels(lx: Lexicon, existing: ExistingLevel[]): PlannedLe
   let next = existing.reduce((m, l) => Math.max(m, l.number), 0) + 1;
   const out: PlannedLevel[] = [];
   for (const stage of STAGES) {
+    let learned = 0;
     for (const cat of stage.categories) {
       const fresh = levelItems(lx, cat).filter((id) => !covered.has(`${cat}:${id}`));
       for (const words of chunk(fresh)) {
         if (next % REVIEW_EVERY === 0) out.push({ number: next++, stage: stage.id, categoryId: null, kind: "review", entryIds: [] });
         out.push({ number: next++, stage: stage.id, categoryId: cat, kind: "learn", entryIds: words });
+        learned++;
       }
     }
+    // Close a stage (of 2+ new levels) with its mastery test — it gates the next stage.
+    if (learned >= 2) out.push({ number: next++, stage: stage.id, categoryId: null, kind: "test", entryIds: [] });
   }
   return out;
 }

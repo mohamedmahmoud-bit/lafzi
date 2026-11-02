@@ -1,4 +1,4 @@
-import { Lock, Play, RefreshCw } from "lucide-react";
+import { Flag, Lock, Play, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHint } from "@/components/ui/card";
 import { Num } from "@/components/ui/num";
@@ -23,14 +23,14 @@ export default async function JourneyPage({ searchParams }: { searchParams: Prom
       <header>
         <p className="text-secondary text-sm font-semibold">رحلة لفظي</p>
         <h1 className="text-2xl font-bold">مستوى بعد مستوى</h1>
-        <p className="text-muted text-sm">كل مستوى ٨ أسئلة عن كلمات جديدة. أجب ٦ صح لتفتح المستوى التالي، وكل خامس مستوى مراجعة لما تعلّمته.</p>
+        <p className="text-muted text-sm">كل مستوى يعلّمك نحو ١٠ كلمات: الكلمة التي تخطئ فيها تعود لك حتى تتقنها. كل خامس مستوى مراجعة، وفي آخر كل مرحلة اختبار إتقان (٩٠٪) يفتح المرحلة التالية.</p>
       </header>
       {error && ERR[error] && <p role="alert" className="bg-rose-soft text-rose rounded-xl px-4 py-3 text-sm">{ERR[error]}</p>}
 
       <Card className="space-y-3">
         {cur ? (
           <>
-            <p className="text-muted text-sm">{cur.stageName}{cur.kind === "review" && " · مراجعة"}</p>
+            <p className="text-muted text-sm">{cur.stageName}{cur.kind === "review" && " · مراجعة"}{cur.kind === "test" && " · اختبار المرحلة (٩٠٪ لتفتح المرحلة التالية)"}</p>
             <p className="font-display text-3xl font-bold">المستوى <Num value={cur.number} /></p>
             <form action={startLevelAction}>
               <input type="hidden" name="level" value={cur.number} />
@@ -57,7 +57,7 @@ export default async function JourneyPage({ searchParams }: { searchParams: Prom
               const isCur = cur?.number === l.number;
               const inner = (
                 <>
-                  <span className="font-num text-base font-black">{l.kind === "review" ? <RefreshCw aria-hidden className="mx-auto size-4" /> : l.number}</span>
+                  <span className="font-num text-base font-black">{l.kind === "review" ? <RefreshCw aria-hidden className="mx-auto size-4" /> : l.kind === "test" ? <Flag aria-hidden className="mx-auto size-4" /> : l.number}</span>
                   <span className="text-[0.6rem] leading-none tracking-tighter">
                     {l.locked ? <Lock aria-hidden className="mx-auto size-3" /> : l.passed ? [1, 2, 3].map((i) => <span key={i} className={i <= l.stars ? "text-sun" : "opacity-30"}>★</span>) : isCur ? "التالي" : ""}
                   </span>
@@ -74,7 +74,7 @@ export default async function JourneyPage({ searchParams }: { searchParams: Prom
                   ) : (
                     <form action={startLevelAction}>
                       <input type="hidden" name="level" value={l.number} />
-                      <button className={cls} aria-label={`${l.kind === "review" ? "مراجعة — " : ""}المستوى ${l.number}${l.passed ? ` (${l.stars} نجوم)` : ""}`}>{inner}</button>
+                      <button className={cls} aria-label={`${l.kind === "review" ? "مراجعة — " : l.kind === "test" ? "اختبار المرحلة — " : ""}المستوى ${l.number}${l.passed ? ` (${l.stars} نجوم)` : ""}`}>{inner}</button>
                     </form>
                   )}
                 </li>

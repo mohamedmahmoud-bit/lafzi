@@ -390,31 +390,92 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(done.rewards.awards.map((x) => x.action)).not.toContain("game_completed");
     expect(done.rewards.capped).toContain("game_completed");
   });
-  it("رحلة لفظي: levels open in order, pass at 6/8 with stars, first pass earns level XP once", async () => {
+  it("رحلة لفظي — mastery: every word must be answered right, missed words come back, stage tests gate the next stage", async () => {
     const journey = await import("@/features/journey/service");
-    // Challenge sections are detected first, so they become the last stage of the path.
     expect(await lexicon.tagDerivedCategories(getDb())).toBeGreaterThan(0); // e.g. أكل / الكلأ
     expect(await lexicon.tagDerivedCategories(getDb())).toBe(0);
     expect(await journey.syncJourney(getDb())).toBeGreaterThan(10);
     expect(await journey.syncJourney(getDb())).toBe(0); // append-only, idempotent
     const [cohort] = await getDb().select().from(s.cohorts).limit(1);
     const d = await mkUser("noon-d", "سلمى خالد", cohort.id);
+    type R = { correctId: string; choices: { id: string }[]; item?: { entryId: string } };
+    const session = async (id: string) => (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, id)))[0];
+    /** Answer every open round (re-asked ones included); `wrongFirst` misses the first N questions once. */
+    const playLevel = async (u: string, id: string, wrongFirst = 0) => {
+      let wrongLeft = wrongFirst;
+      for (;;) {
+        const ss = await session(id);
+        const done = new Set((await getDb().select().from(s.gameSessionAnswers).where(eq(s.gameSessionAnswers.sessionId, id))).map((x) => x.roundIndex));
+        const rounds = ss.rounds as unknown as R[];
+        const i = rounds.findIndex((_, j) => !done.has(j));
+        if (i === -1) break;
+        const r = rounds[i];
+        const pick = wrongLeft > 0 ? r.choices.find((c) => c.id !== r.correctId)!.id : r.correctId;
+        if (wrongLeft > 0) wrongLeft--;
+        await games.answerRound(u, id, i, pick);
+      }
+      return games.completeGame(u, id);
+    };
+
     await expect(games.startLevel(d, 2)).rejects.toMatchObject({ code: "locked" });
     const l1 = await games.startLevel(d, 1);
-    const rounds = (await getDb().select().from(s.gameSessions).where(eq(s.gameSessions.id, l1.id)))[0].rounds as { kind: string }[];
-    expect(rounds).toHaveLength(8);
-    const done = await playAll(d, l1.id);
-    expect(done.level).toMatchObject({ number: 1, passed: true, stars: 3, firstPass: true, nextNumber: 2 });
+    const [lvl1] = await getDb().select().from(s.journeyLevels).where(eq(s.journeyLevels.number, 1));
+    const r1 = (await session(l1.id)).rounds as unknown as R[];
+    expect(r1.length).toBe(lvl1.entryIds.length); // every word of the level is asked
+    const view = (await games.getGameView(d, l1.id))!;
+    expect(JSON.stringify(view.rounds)).not.toContain("alt"); // the retry version never reaches the browser
+    const done = await playLevel(d, l1.id);
+    expect(done.level).toMatchObject({ number: 1, passed: true, stars: 3, firstPass: true, nextNumber: 2, items: r1.length, firstTry: r1.length });
     expect(done.rewards.awards.map((x) => x.action)).toContain("level_passed");
-    // Replaying a passed level never pays the level XP again.
-    const again = await playAll(d, (await games.startLevel(d, 1)).id);
+    const again = await playLevel(d, (await games.startLevel(d, 1)).id);
     expect(again.rewards.awards.map((x) => x.action)).not.toContain("level_passed");
-    // Failing level 2 keeps it as the next step.
-    const fail = await playAll(d, (await games.startLevel(d, 2)).id, false);
-    expect(fail.level).toMatchObject({ number: 2, passed: false, stars: 0, nextNumber: 2 });
-    await expect(games.startLevel(d, 3)).rejects.toMatchObject({ code: "locked" });
-    const map = await journey.getJourney(d);
-    expect(map.current?.number).toBe(2);
-    expect(map.passedLevels).toBe(1);
+
+    // A miss is re-asked later in the same level, with other options; the level still needs every word right.
+    const l2 = await games.startLevel(d, 2);
+    const before = ((await session(l2.id)).rounds as unknown as R[]).length;
+    const first = ((await session(l2.id)).rounds as unknown as R[])[0];
+    const miss = await games.answerRound(d, l2.id, 0, first.choices.find((c) => c.id !== first.correctId)!.id);
+    expect(miss.appended).toBeTruthy();
+    const after = (await session(l2.id)).rounds as unknown as R[];
+    expect(after.length).toBe(before + 1);
+    expect(after.at(-1)!.item!.entryId).toBe(first.item!.entryId);
+    await expect(games.completeGame(d, l2.id)).rejects.toMatchObject({ code: "incomplete" });
+    const l2done = await playLevel(d, l2.id);
+    expect(l2done.level).toMatchObject({ passed: true, firstTry: before - 1, items: before });
+    expect(l2done.level!.stars).toBeLessThan(3);
+
+    // Stage test: pretend the stage's levels are passed, then fail the test → the next stage stays locked.
+    const [test] = await getDb().select().from(s.journeyLevels).where(eq(s.journeyLevels.kind, "test")).orderBy(s.journeyLevels.number).limit(1);
+    const beforeTest = await getDb().select().from(s.journeyLevels).where(sql`${s.journeyLevels.number} < ${test.number}`);
+    for (const l of beforeTest) await getDb().insert(s.studentLevelProgress).values({ userId: d, levelId: l.id, stars: 1, passedAt: new Date() }).onConflictDoNothing();
+    const t1 = await games.startLevel(d, test.number);
+    const tr = (await session(t1.id)).rounds as unknown as (R & { alt?: unknown })[];
+    expect(tr.length).toBeGreaterThanOrEqual(5);
+    expect(tr.every((r) => !r.alt)).toBe(true); // no second chances inside a test
+    const failed = await playLevel(d, t1.id, tr.length);
+    expect(((await session(t1.id)).rounds as unknown[]).length).toBe(tr.length);
+    expect(failed.level).toMatchObject({ kind: "test", passed: false, missed: tr.length });
+    await expect(games.startLevel(d, test.number + 1)).rejects.toMatchObject({ code: "locked" });
+    // Corrective level: only the missed words, with the mastery loop; then the test again.
+    const corr = await games.startLevel(d, test.number, "corrective");
+    expect(((await session(corr.id)).rounds as unknown[]).length).toBe(tr.length);
+    const corrDone = await playLevel(d, corr.id, 1);
+    expect(corrDone.level).toMatchObject({ kind: "corrective", passed: true, nextNumber: test.number });
+    const passed = await playLevel(d, (await games.startLevel(d, test.number)).id);
+    expect(passed.level).toMatchObject({ kind: "test", passed: true, nextNumber: test.number + 1 });
+    expect((await journey.getJourney(d)).current?.number).toBe(test.number + 1);
+
+    // One-time upgrade of a path built before tests: tests are added, students keep their progress.
+    const passedIds = (await getDb().select().from(s.studentLevelProgress).where(and(eq(s.studentLevelProgress.userId, d), sql`${s.studentLevelProgress.passedAt} is not null`))).map((x) => x.levelId).sort();
+    await getDb().delete(s.journeyLevels).where(eq(s.journeyLevels.kind, "test"));
+    expect(await journey.insertStageTests(getDb())).toBeGreaterThan(0);
+    expect(await journey.insertStageTests(getDb())).toBe(0);
+    const nums = (await getDb().select({ n: s.journeyLevels.number }).from(s.journeyLevels).orderBy(s.journeyLevels.number)).map((x) => x.n);
+    expect(nums).toEqual(nums.map((_, i) => i + 1));
+    // Each stage stays one continuous run on the map (no stray review from another stage).
+    const runs = (await getDb().select({ st: s.journeyLevels.stage }).from(s.journeyLevels).orderBy(s.journeyLevels.number)).map((x) => x.st).filter((st, i, a) => st !== a[i - 1]);
+    expect(new Set(runs).size).toBe(runs.length);
+    const stillPassed = (await getDb().select().from(s.studentLevelProgress).where(and(eq(s.studentLevelProgress.userId, d), sql`${s.studentLevelProgress.passedAt} is not null`))).map((x) => x.levelId);
+    for (const id of passedIds.filter((x) => x !== test.id)) expect(stillPassed).toContain(id);
   });
 });

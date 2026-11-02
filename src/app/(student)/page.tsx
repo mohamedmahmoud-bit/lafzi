@@ -120,7 +120,7 @@ function JourneyHero({ d }: { d: DashboardData }) {
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="text-sm opacity-90">تابع رحلتك · {j.current.stageName}</p>
-              <p className="font-display text-3xl font-bold">المستوى <Num value={j.current.number} />{j.current.kind === "review" && <span className="text-base font-normal"> · مراجعة</span>}</p>
+              <p className="font-display text-3xl font-bold">المستوى <Num value={j.current.number} />{j.current.kind === "review" && <span className="text-base font-normal"> · مراجعة</span>}{j.current.kind === "test" && <span className="text-base font-normal"> · اختبار المرحلة</span>}</p>
             </div>
             <Link href="/journey" className="text-sm font-semibold underline opacity-90">الخريطة</Link>
           </div>

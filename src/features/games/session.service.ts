@@ -35,7 +35,8 @@ import { gameById, type GameDef } from "./modes";
 import type { ClientRound, GameSummary, Round, SubskillResult } from "./types";
 import { boardRounds, meaningRounds, playableTypes, relationForCategory, relationRounds } from "./vocab-builders";
 import { publishedTeacherQuestions, type TeacherQuestion } from "@/features/questions/service";
-import { currentLevel, levelRounds, recordLevelResult } from "@/features/journey/service";
+import { currentLevel, finishLevel, levelRounds } from "@/features/journey/service";
+import { MAX_LEVEL_ROUNDS } from "@/features/journey/plan";
 
 export class GameError extends Error {
   constructor(public code: "unknown_game" | "not_live" | "locked" | "content_unavailable" | "not_found" | "not_in_progress" | "bad_round" | "incomplete" | "answered" | "time_up") {
@@ -209,7 +210,7 @@ export const isPlayable = async (gameId: string) => {
   return !!g && (await availableRounds(gameId)) >= minRoundsFor(g);
 };
 
-async function insertSession(userId: string, g: GameDef, rounds: Round[], p: { timed: boolean; kind: string; challengeId?: string | null; categoryId?: string | null; levelId?: string | null }) {
+async function insertSession(userId: string, g: GameDef, rounds: Round[], p: { timed: boolean; kind: string; challengeId?: string | null; categoryId?: string | null; levelId?: string | null; levelMode?: string }) {
   const now = new Date();
   const [s] = await getDb()
     .insert(gameSessions)
@@ -221,6 +222,7 @@ async function insertSession(userId: string, g: GameDef, rounds: Round[], p: { t
       challengeId: p.challengeId ?? null,
       categoryId: p.categoryId ?? null,
       levelId: p.levelId ?? null,
+      levelMode: p.levelMode ?? "play",
       deadlineAt: g.mechanic === "race" ? new Date(now.getTime() + RACE_MS) : null,
       day: learningDay(),
       rounds: rounds as unknown as Record<string, unknown>[],
@@ -278,7 +280,7 @@ export async function startGame(userId: string, gameId: string, opts: { timed?: 
  * «رحلة لفظي»: start (or resume) a level. Levels open in order — any passed level can be replayed,
  * plus the first one not yet passed.
  */
-export async function startLevel(userId: string, number: number) {
+export async function startLevel(userId: string, number: number, mode: "play" | "corrective" = "play") {
   const db = getDb();
   const g = gameById("journey")!;
   const [level] = await db.select().from(journeyLevels).where(eq(journeyLevels.number, number)).limit(1);
@@ -288,13 +290,14 @@ export async function startLevel(userId: string, number: number) {
   const [open] = await db
     .select({ id: gameSessions.id })
     .from(gameSessions)
-    .where(and(eq(gameSessions.userId, userId), eq(gameSessions.levelId, level.id), eq(gameSessions.status, "in_progress"), eq(gameSessions.day, learningDay())))
+    .where(and(eq(gameSessions.userId, userId), eq(gameSessions.levelId, level.id), eq(gameSessions.levelMode, mode), eq(gameSessions.status, "in_progress"), eq(gameSessions.day, learningDay())))
     .limit(1);
   if (open) return { id: open.id, created: false };
   const lx = (await loadGameContent()).lx;
-  const rounds = await levelRounds(db, userId, level, lx, seededRandom(hashString(`${userId}:level:${level.number}:${Date.now()}`)));
-  if (rounds.length < MIN_ROUNDS) throw new GameError("content_unavailable");
-  const id = await insertSession(userId, g, rounds, { timed: false, kind: "level", categoryId: level.categoryId, levelId: level.id });
+  if (mode === "corrective" && level.kind !== "test") throw new GameError("not_found");
+  const rounds = await levelRounds(db, userId, level, lx, seededRandom(hashString(`${userId}:level:${level.number}:${Date.now()}`)), mode);
+  if (rounds.length < (mode === "corrective" ? 1 : MIN_ROUNDS)) throw new GameError("content_unavailable");
+  const id = await insertSession(userId, g, rounds, { timed: false, kind: "level", categoryId: level.categoryId, levelId: level.id, levelMode: mode });
   return { id, created: true };
 }
 
@@ -312,8 +315,10 @@ export type GameView = {
   kind: string;
   challengeId: string | null;
   categoryId: string | null;
-  /** «رحلة لفظي» level number (level sessions only). */
+  /** «رحلة لفظي» level number (level sessions only), its kind and whether this is the corrective round. */
   level: number | null;
+  levelKind: string | null;
+  levelMode: string;
   status: string;
   timed: boolean;
   roundMs: number;
@@ -325,6 +330,23 @@ export type GameView = {
   summary: (GameSummary & { rewards?: RewardSummary }) | null;
 };
 
+/** A round as the browser sees it: the answer key and explanation only once it's answered. */
+function toClientRound(r: Round, index: number, a: typeof gameSessionAnswers.$inferSelect | undefined): ClientRound {
+  return {
+    index,
+    kind: r.kind,
+    prompt: r.prompt,
+    noonQuestionId: r.noonQuestionId,
+    subskillId: r.subskillId,
+    difficulty: r.difficulty,
+    stem: r.stem,
+    passage: r.passage,
+    choices: r.choices,
+    hintRemoved: r.hintRemoved,
+    answered: a ? { choiceId: String(a.response.choiceId), isCorrect: a.isCorrect, correctId: r.correctId, explanation: r.explanation, points: a.points, hintUsed: a.hintUsed } : null,
+  };
+}
+
 /** Client-safe view: answer keys/explanations only for answered rounds. */
 export async function getGameView(userId: string, sessionId: string): Promise<GameView | null> {
   const db = getDb();
@@ -332,22 +354,7 @@ export async function getGameView(userId: string, sessionId: string): Promise<Ga
   if (!s) return null;
   const answers = await db.select().from(gameSessionAnswers).where(eq(gameSessionAnswers.sessionId, s.id));
   const byRound = new Map(answers.map((a) => [a.roundIndex, a]));
-  const rounds = (s.rounds as unknown as Round[]).map((r, index): ClientRound => {
-    const a = byRound.get(index);
-    return {
-      index,
-      kind: r.kind,
-      prompt: r.prompt,
-      noonQuestionId: r.noonQuestionId,
-      subskillId: r.subskillId,
-      difficulty: r.difficulty,
-      stem: r.stem,
-      passage: r.passage,
-      choices: r.choices,
-      hintRemoved: r.hintRemoved,
-      answered: a ? { choiceId: String(a.response.choiceId), isCorrect: a.isCorrect, correctId: r.correctId, explanation: r.explanation, points: a.points, hintUsed: a.hintUsed } : null,
-    };
-  });
+  const rounds = (s.rounds as unknown as Round[]).map((r, index): ClientRound => toClientRound(r, index, byRound.get(index)));
   return {
     id: s.id,
     gameId: s.gameTypeId,
@@ -356,7 +363,10 @@ export async function getGameView(userId: string, sessionId: string): Promise<Ga
     kind: s.kind,
     challengeId: s.challengeId,
     categoryId: s.categoryId,
-    level: s.levelId ? ((await db.select({ n: journeyLevels.number }).from(journeyLevels).where(eq(journeyLevels.id, s.levelId)).limit(1))[0]?.n ?? null) : null,
+    ...(await (async () => {
+      const [l] = s.levelId ? await db.select({ n: journeyLevels.number, kind: journeyLevels.kind }).from(journeyLevels).where(eq(journeyLevels.id, s.levelId)).limit(1) : [];
+      return { level: l?.n ?? null, levelKind: l?.kind ?? null, levelMode: s.levelMode };
+    })()),
     status: s.status,
     timed: s.timed,
     roundMs: TIMED_ROUND_MS,
@@ -461,7 +471,17 @@ export async function answerRound(userId: string, sessionId: string, roundIndex:
       .update(gameSessions)
       .set({ score: sql`${gameSessions.score} + ${points}`, correctCount: sql`${gameSessions.correctCount} + ${isCorrect ? 1 : 0}` })
       .where(eq(gameSessions.id, s.id));
-    return { isCorrect, correctId: r.correctId, explanation: r.explanation, points, replay: false, entryIds: r.entryIds ?? [] };
+    // Mastery loop (journey levels): a missed word comes back later in the level, asked another way.
+    let appended: ClientRound | null = null;
+    if (!isCorrect && s.levelId && r.alt && rounds.length < MAX_LEVEL_ROUNDS) {
+      const retry: Round = { ...r, choices: r.alt.choices, correctId: r.alt.correctId, alt: { choices: r.choices, correctId: r.correctId }, hintRemoved: null };
+      await tx
+        .update(gameSessions)
+        .set({ rounds: [...rounds, retry] as unknown as Record<string, unknown>[], plannedRounds: sql`${gameSessions.plannedRounds} + 1` })
+        .where(eq(gameSessions.id, s.id));
+      appended = toClientRound(retry, rounds.length, undefined);
+    }
+    return { isCorrect, correctId: r.correctId, explanation: r.explanation, points, replay: false, appended, entryIds: r.entryIds ?? [] };
   });
   const { entryIds, ...result } = { entryIds: [] as string[], ...out };
   if (!result.replay) await recordPractice(userId, entryIds, result.isCorrect);
@@ -552,7 +572,7 @@ export async function completeGame(userId: string, sessionId: string): Promise<G
     };
 
     if (s.levelId) {
-      const level = await recordLevelResult(tx, userId, s.levelId, correct, s.plannedRounds);
+      const level = await finishLevel(tx, userId, { id: s.id, levelId: s.levelId, levelMode: s.levelMode, rounds: s.rounds as unknown as Round[], plannedRounds: s.plannedRounds });
       if (level) {
         summary.level = level;
         if (level.firstPass) await awardXp(tx, { userId, action: "level_passed", idempotencyKey: `level_passed:${userId}:${s.levelId}`, day, sourceId: s.id }, rewards);

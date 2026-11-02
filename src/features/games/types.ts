@@ -19,9 +19,12 @@ export type Round = {
   relationshipId?: string;
   entryIds?: string[];
   hintRemoved: string | null;
+  /** Mastery loop (journey): the word this round checks, and a second version to re-ask it with. */
+  item?: { categoryId: string; entryId: string };
+  alt?: { choices: { id: string; text: string }[]; correctId: string };
 };
 
-export type ClientRound = Omit<Round, "correctId" | "explanation" | "versionId" | "questionId" | "entryIds" | "relationshipId" | "teacherQuestionId"> & {
+export type ClientRound = Omit<Round, "correctId" | "explanation" | "versionId" | "questionId" | "entryIds" | "relationshipId" | "teacherQuestionId" | "item" | "alt"> & {
   index: number;
   answered: null | { choiceId: string; isCorrect: boolean; correctId: string; explanation: string | null; points: number; hintUsed: boolean };
 };
@@ -37,5 +40,21 @@ export type GameSummary = {
   weakest: { subskillId: string; nameAr: string } | null;
   improved: { subskillId: string; nameAr: string; delta: number }[];
   /** «رحلة لفظي» level outcome (level sessions only). */
-  level?: { number: number; kind: string; passed: boolean; stars: number; passMark: number; firstPass: boolean; nextNumber: number | null };
+  level?: LevelOutcome;
+};
+
+/** «رحلة لفظي» outcome shown on the results screen. */
+export type LevelOutcome = {
+  number: number;
+  kind: string; // learn | review | test | corrective
+  passed: boolean;
+  stars: number;
+  firstPass: boolean;
+  nextNumber: number | null;
+  /** Words in the level, and how many were right on the first try. */
+  items: number;
+  firstTry: number;
+  /** Stage test: questions needed to pass, and how many words were missed. */
+  passMark?: number;
+  missed?: number;
 };

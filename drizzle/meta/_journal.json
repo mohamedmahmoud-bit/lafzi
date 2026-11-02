@@ -64,6 +64,13 @@
       "when": 1793611482642,
       "tag": "0008_journey",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793616789510,
+      "tag": "0009_mastery",
+      "breakpoints": true
     }
   ]
 }
