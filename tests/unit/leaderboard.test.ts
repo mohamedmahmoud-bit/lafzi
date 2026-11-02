@@ -26,3 +26,17 @@ describe("weekly leaderboard ranking", () => {
     expect(visibleWindow(r, "u3").tail).toEqual([]);
   });
 });
+
+import { pickBestBoard } from "@/features/leaderboard/ranking";
+describe("home page board: the one where the student ranks highest", () => {
+  it("1st today and 10th overall → today; the reverse → overall", () => {
+    expect(pickBestBoard([{ period: "all", rank: 10 }, { period: "week", rank: 4 }, { period: "day", rank: 1 }])).toBe("day");
+    expect(pickBestBoard([{ period: "all", rank: 1 }, { period: "week", rank: 3 }, { period: "day", rank: 10 }])).toBe("all");
+  });
+  it("ties prefer overall, then the week; periods without points don't count", () => {
+    expect(pickBestBoard([{ period: "all", rank: 2 }, { period: "week", rank: 2 }, { period: "day", rank: 2 }])).toBe("all");
+    expect(pickBestBoard([{ period: "all", rank: 5 }, { period: "week", rank: 2 }, { period: "day", rank: 2 }])).toBe("week");
+    expect(pickBestBoard([{ period: "all", rank: 7 }, { period: "week", rank: null }, { period: "day", rank: null }])).toBe("all");
+    expect(pickBestBoard([{ period: "all", rank: null }, { period: "week", rank: null }, { period: "day", rank: null }])).toBe("all");
+  });
+});

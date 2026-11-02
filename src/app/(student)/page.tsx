@@ -200,14 +200,16 @@ function FriendsCard({ d }: { d: DashboardData }) {
 
 function WeeklyBoard({ d }: { d: DashboardData }) {
   return (
-    <Link href="/leaderboard" className="rounded-brand block">
+    <Link href={`/leaderboard?period=${d.boardPeriod}`} className="rounded-brand block">
       <Card className="hover:border-primary/40 space-y-2 transition">
         <div className="flex items-center gap-2">
           <Trophy aria-hidden className="text-sun size-5" />
-          <CardTitle className="flex-1">الترتيب العام</CardTitle>
+          <CardTitle className="flex-1">{d.boardPeriod === "day" ? "ترتيب اليوم" : d.boardPeriod === "week" ? "ترتيب الأسبوع" : "الترتيب العام"}</CardTitle>
           {d.myRank && <span className="font-num text-sm font-bold">#{d.myRank}</span>}
         </div>
-        <p className="text-muted -mt-1 text-xs">مجموع النقاط منذ البداية · ترتيب الأسبوع واليوم في صفحة الترتيب</p>
+        <p className="text-muted -mt-1 text-xs">
+          {d.boardPeriod === "day" ? "نقاط اليوم" : d.boardPeriod === "week" ? "نقاط هذا الأسبوع" : "مجموع النقاط منذ البداية"} · نعرض لك الترتيب الذي أنت فيه أعلى — كل الترتيبات في صفحة الترتيب
+        </p>
         <ol className="space-y-1.5">
           {d.board.map((r) => (
             <li key={r.userId} className={cn("flex items-center gap-2 text-sm", r.isMe && "text-primary-ink font-bold")}>

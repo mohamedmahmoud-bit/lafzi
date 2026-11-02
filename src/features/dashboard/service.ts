@@ -9,7 +9,8 @@ import { PLAY_GAMES } from "@/features/games/modes";
 import { isPlayable } from "@/features/games/session.service";
 import { getLevels, getXpRule } from "@/features/gamification/xp.service";
 import { levelFor } from "@/features/gamification/levels";
-import { getCohortBoard } from "@/features/leaderboard/service";
+import { BOARD_PERIODS, getCohortBoard } from "@/features/leaderboard/service";
+import { pickBestBoard } from "@/features/leaderboard/ranking";
 import { getJourney } from "@/features/journey/service";
 import { loadLexicon } from "@/features/lexicon/content";
 import { MISSION_MINUTES, missionProgress } from "@/features/missions/config";
@@ -49,7 +50,11 @@ export async function getDashboard(user: CurrentUser) {
       .where(eq(studentVocabularyProgress.userId, user.id))
       .groupBy(studentVocabularyProgress.state),
   ]);
-  const cohort = await getCohortBoard(user, friends.map((f) => f.userId));
+  // Show the board where the student ranks highest (today, this week or overall) — the most motivating view.
+  const fids = friends.map((f) => f.userId);
+  const boards = await Promise.all(BOARD_PERIODS.map(async (period) => ({ period, b: await getCohortBoard(user, fids, period) })));
+  const best = pickBestBoard(boards.map((x) => ({ period: x.period, rank: x.b.me && x.b.me.xp > 0 ? x.b.me.rank : null })));
+  const cohort = boards.find((x) => x.period === best)!.b;
   const jm = await getJourney(user.id);
   const curStage = jm.current ? jm.stages.find((st) => st.levels.some((l) => l.number === jm.current!.number)) : null;
   const top = cohort.rows.slice(0, 5);
@@ -89,6 +94,7 @@ export async function getDashboard(user: CurrentUser) {
     challenges,
     board: board.slice(0, 5),
     myRank: cohort.me?.rank ?? null,
+    boardPeriod: best,
     boardSize: cohort.size,
     badge,
     collection: { known: (byState.familiar ?? 0) + (byState.mastered ?? 0), learned: profile.totalWordsLearned, mastered: profile.masteredWords, learning: (byState.learning ?? 0) + (byState.familiar ?? 0), total: lx.entries.size },

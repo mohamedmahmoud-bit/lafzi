@@ -44,3 +44,13 @@ export function xpToNextRank(ranked: RankedRow[], userId: string): number | null
   const above = ranked.filter((r) => r.xp > me.xp).at(-1);
   return above ? above.xp - me.xp + 1 : null;
 }
+
+/**
+ * Which board to show on the home page: the period where the student ranks highest. Periods where
+ * they have no points yet don't count; ties prefer the overall board, then the week.
+ */
+export function pickBestBoard(ranks: { period: "all" | "week" | "day"; rank: number | null }[]): "all" | "week" | "day" {
+  const order = { all: 0, week: 1, day: 2 } as const;
+  const ranked = ranks.filter((r) => r.rank !== null).sort((a, b) => a.rank! - b.rank! || order[a.period] - order[b.period]);
+  return ranked[0]?.period ?? "all";
+}
