@@ -144,8 +144,11 @@ export async function finishLevel(tx: Tx, userId: string, s: { id: string; level
   const answers = (await tx.select().from(gameSessionAnswers).where(eq(gameSessionAnswers.sessionId, s.id))).sort((a, b) => a.roundIndex - b.roundIndex);
   const byItem = new Map<string, boolean[]>();
   const itemOf = new Map<string, Item>();
+  // Rounds built before the mastery loop carry no `item`: derive it from the word the round asked about.
+  const legacy = !s.rounds.some((r) => r.item);
   for (const a of answers) {
-    const it = s.rounds[a.roundIndex]?.item;
+    const r = s.rounds[a.roundIndex];
+    const it = r?.item ?? (r?.entryIds?.[0] ? { categoryId: level.categoryId ?? r.subskillId ?? "", entryId: r.entryIds[0] } : undefined);
     if (!it) continue;
     itemOf.set(itemKey(it), it);
     byItem.set(itemKey(it), [...(byItem.get(itemKey(it)) ?? []), a.isCorrect]);
@@ -168,6 +171,10 @@ export async function finishLevel(tx: Tx, userId: string, s: { id: string; level
     passed = correct >= passMark;
     stars = !passed ? 0 : correct === s.plannedRounds ? 3 : correct >= s.plannedRounds - 1 ? 2 : 1;
     missed = [...byItem].filter(([, r]) => !r[0]).map(([k]) => itemOf.get(k)!);
+  } else if (legacy) {
+    // No second chances existed in that round: pass on 75% at the first try (the old rule).
+    passed = items > 0 && firstTry / items >= 0.75;
+    stars = passed ? starsFor(firstTry, items) : 0;
   } else {
     passed = items > 0 && [...byItem.values()].every((r) => r.includes(true));
     stars = passed ? starsFor(firstTry, items) : 0;

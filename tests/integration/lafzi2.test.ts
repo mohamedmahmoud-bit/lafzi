@@ -418,6 +418,22 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     };
 
     await expect(games.startLevel(d, 2)).rejects.toMatchObject({ code: "locked" });
+    // A round opened before the mastery loop (no per-word data) is never resumed: a fresh one starts.
+    const [lv1] = await getDb().select().from(s.journeyLevels).where(eq(s.journeyLevels.number, 1));
+    const legacyRounds = ((await session((await games.startLevel(d, 1)).id)).rounds as unknown as Record<string, unknown>[]).map(({ item: _i, alt: _a, ...r }) => r);
+    const [legacy] = await getDb().insert(s.gameSessions).values({ userId: d, gameTypeId: "journey", kind: "level", levelId: lv1.id, day, rounds: legacyRounds, plannedRounds: legacyRounds.length }).returning({ id: s.gameSessions.id });
+    await getDb().update(s.gameSessions).set({ status: "abandoned" }).where(and(eq(s.gameSessions.userId, d), sql`${s.gameSessions.id} <> ${legacy.id}`));
+    const fresh = await games.startLevel(d, 1);
+    expect(fresh.id).not.toBe(legacy.id);
+    expect((await session(legacy.id)).status).toBe("abandoned");
+    // …and if an old round is finished anyway, its words are still counted (never «0 من 0»).
+    await getDb().update(s.gameSessions).set({ status: "in_progress" }).where(eq(s.gameSessions.id, legacy.id));
+    const legacyDone = await playLevel(d, legacy.id);
+    expect(legacyDone.level!.items).toBe(legacyRounds.length);
+    expect(legacyDone.level!.firstTry).toBe(legacyRounds.length);
+    await getDb().delete(s.studentLevelProgress).where(eq(s.studentLevelProgress.userId, d));
+    await getDb().delete(s.xpTransactions).where(and(eq(s.xpTransactions.userId, d), eq(s.xpTransactions.action, "level_passed")));
+    await getDb().update(s.gameSessions).set({ status: "abandoned" }).where(eq(s.gameSessions.id, fresh.id));
     const l1 = await games.startLevel(d, 1);
     const [lvl1] = await getDb().select().from(s.journeyLevels).where(eq(s.journeyLevels.number, 1));
     const r1 = (await session(l1.id)).rounds as unknown as R[];

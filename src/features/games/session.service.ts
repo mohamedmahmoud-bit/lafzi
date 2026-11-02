@@ -288,11 +288,15 @@ export async function startLevel(userId: string, number: number, mode: "play" | 
   const cur = await currentLevel(db, userId);
   if (cur && level.number > cur.number) throw new GameError("locked");
   const [open] = await db
-    .select({ id: gameSessions.id })
+    .select({ id: gameSessions.id, rounds: gameSessions.rounds })
     .from(gameSessions)
     .where(and(eq(gameSessions.userId, userId), eq(gameSessions.levelId, level.id), eq(gameSessions.levelMode, mode), eq(gameSessions.status, "in_progress"), eq(gameSessions.day, learningDay())))
     .limit(1);
-  if (open) return { id: open.id, created: false };
+  if (open) {
+    // Resume only a round built with the mastery loop; an older one is set aside and rebuilt.
+    if ((open.rounds as unknown as Round[]).some((r) => r.item)) return { id: open.id, created: false };
+    await db.update(gameSessions).set({ status: "abandoned" }).where(eq(gameSessions.id, open.id));
+  }
   const lx = (await loadGameContent()).lx;
   if (mode === "corrective" && level.kind !== "test") throw new GameError("not_found");
   const rounds = await levelRounds(db, userId, level, lx, seededRandom(hashString(`${userId}:level:${level.number}:${Date.now()}`)), mode);
