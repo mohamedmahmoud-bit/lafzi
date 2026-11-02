@@ -8,10 +8,13 @@ import type { Lexicon, LexRelation } from "@/features/lexicon/content";
 import { RELATION_CATEGORY, RELATION_TEXT, type RelationType } from "@/features/lexicon/mapping";
 import { lexKey, meaningKey } from "@/features/lexicon/normalize";
 import { shuffle } from "@/lib/utils";
+import { asVerb } from "@/features/lexicon/tashkeel";
 import type { Round } from "./types";
 
 type Rand = () => number;
 const lemma = (lx: Lexicon, id: string) => lx.entries.get(id)?.lemma ?? "";
+/** How a word is shown inside a pair question/board: verbs use the reviewed verb vocalisation. */
+const shown = (lx: Lexicon, id: string, type: RelationType) => (type === "verb_present" ? asVerb(lemma(lx, id)) : lemma(lx, id));
 
 /** Entries linked to `id` by synonym (either direction) — their meanings can't be distractors. */
 function synonymsOf(lx: Lexicon, id: string) {
@@ -182,16 +185,16 @@ export function relationRound(lx: Lexicon, rel: LexRelation, rand: Rand): Round 
     if (!distractors.some((d) => meaningKey(lemma(lx, d)) === meaningKey(lemma(lx, id)) || wordsOfLemma(lemma(lx, d)).some((w) => ws.includes(w)))) distractors.push(id);
   }
   if (distractors.length < 3) return null;
-  const choices = shuffle([rel.toId, ...distractors], rand).map((id) => ({ id, text: lemma(lx, id) }));
+  const choices = shuffle([rel.toId, ...distractors], rand).map((id) => ({ id, text: shown(lx, id, rel.type) }));
   return {
     kind: "relation",
-    prompt: RELATION_TEXT[rel.type].ask(lemma(lx, rel.fromId)),
+    prompt: RELATION_TEXT[rel.type].ask(shown(lx, rel.fromId, rel.type)),
     questionId: null,
     versionId: null,
     noonQuestionId: null,
     subskillId: RELATION_CATEGORY[rel.type],
     difficulty: lx.entries.get(rel.fromId)?.difficulty ?? 2,
-    stem: lemma(lx, rel.fromId),
+    stem: shown(lx, rel.fromId, rel.type),
     passage: null,
     choices,
     correctId: rel.toId,
@@ -248,7 +251,7 @@ export function playableTypes(lx: Lexicon, n: number, rand: Rand): RelationType[
 export function boardRounds(lx: Lexicon, type: RelationType, n: number, rand: Rand, kind: "match" | "memory"): Round[] {
   const set = unambiguousSet(lx, type, n, rand);
   if (set.length < n) return [];
-  const rights = shuffle(set.map((r) => ({ id: r.toId, text: lemma(lx, r.toId) })), rand);
+  const rights = shuffle(set.map((r) => ({ id: r.toId, text: shown(lx, r.toId, type) })), rand);
   return set.map((r) => ({
     kind,
     prompt: RELATION_TEXT[type].pairHint,
@@ -257,7 +260,7 @@ export function boardRounds(lx: Lexicon, type: RelationType, n: number, rand: Ra
     noonQuestionId: null,
     subskillId: RELATION_CATEGORY[type],
     difficulty: lx.entries.get(r.fromId)?.difficulty ?? 2,
-    stem: lemma(lx, r.fromId),
+    stem: shown(lx, r.fromId, type),
     passage: null,
     choices: rights,
     correctId: r.toId,

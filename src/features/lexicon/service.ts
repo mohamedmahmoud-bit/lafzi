@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/db/client";
 import {
   entryCategories,
@@ -14,7 +14,7 @@ import {
 import { parseCsvDataset, parseMarkdownDataset, type SourceRow } from "./dataset";
 import { CATEGORY_DIFFICULTY, RELATION_CATEGORY, RELATION_LABEL, type RelationType } from "./mapping";
 import { lexKey, meaningKey } from "./normalize";
-import { vocalize } from "./tashkeel";
+import { stripTashkeel, vocalize } from "./tashkeel";
 import { summarize, validateRows } from "./validate";
 
 export const DATASET_SOURCE_LABEL = "قائمة مفردات لفظي الأولية (مرفوعة من الفريق)";
@@ -252,6 +252,29 @@ export async function applyTashkeel(db: DbOrTx) {
     }
   }
   return updated;
+}
+
+/**
+ * A past verb that shares its letters with another word (كَتَبَ / كُتُب) is ONE entry, so a single
+ * vocalisation would be wrong for one of them. Such entries are shown without tashkeel; verb
+ * questions vocalise the verb on their own (see VERB_TASHKEEL). Returns how many were changed.
+ */
+export async function normalizeVerbHomographs(db: DbOrTx) {
+  const verbs = await db.select({ id: vocabularyRelationships.fromEntryId }).from(vocabularyRelationships).where(eq(vocabularyRelationships.type, "verb_present"));
+  if (!verbs.length) return 0;
+  const ids = [...new Set(verbs.map((v) => v.id))];
+  const cats = await db.select().from(entryCategories).where(inArray(entryCategories.entryId, ids));
+  const ents = await db.select({ id: vocabularyEntries.id, lemma: vocabularyEntries.lemma }).from(vocabularyEntries).where(inArray(vocabularyEntries.id, ids));
+  let n = 0;
+  for (const e of ents) {
+    const other = cats.some((c) => c.entryId === e.id && c.categoryId !== "vo_verb");
+    const plain = stripTashkeel(e.lemma);
+    if (other && plain !== e.lemma) {
+      await db.update(vocabularyEntries).set({ lemma: plain }).where(eq(vocabularyEntries.id, e.id));
+      n++;
+    }
+  }
+  return n;
 }
 
 /** Admin: set a word's displayed form (tashkeel). The letters must stay the same word. */

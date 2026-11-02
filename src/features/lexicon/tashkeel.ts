@@ -28,6 +28,19 @@ const LIST = `
 الضَّبُع اليَرْبُوع الظَّبْي القَطَا
 `;
 
+/**
+ * Verbs in context: the «أفعال» section pairs a past verb with its present. Some past verbs share
+ * letters with nouns (كَتَبَ / كُتُب), so verb questions use THIS vocalisation, never the noun's.
+ */
+const VERBS = `
+كَتَبَ يَكْتُبُ قَرَأَ يَقْرَأُ جَلَسَ يَجْلِسُ أَكَلَ يَأْكُلُ شَرِبَ يَشْرَبُ نَامَ يَنَامُ مَشَى يَمْشِي
+سَمِعَ يَسْمَعُ رَأَى يَرَى عَرَفَ يَعْرِفُ فَتَحَ يَفْتَحُ أَغْلَقَ يُغْلِقُ ذَهَبَ يَذْهَبُ جَاءَ يَجِيءُ
+`;
+export const VERB_TASHKEEL: Map<string, string> = new Map(VERBS.split(/\s+/).filter(Boolean).map((w) => [lexKey(w), w.normalize("NFC")]));
+/** A word as shown in a verb question (falls back to the stored form). */
+export const asVerb = (lemma: string) => VERB_TASHKEEL.get(lexKey(lemma)) ?? lemma;
+export const stripTashkeel = (w: string) => w.normalize("NFC").replace(HARAKAT_ALL, "");
+
 /** Multi-word expressions (kept as whole phrases). */
 const PHRASES = [
   "ثِيَاب رَثَّة", "رَامَ الشَّيْءَ", "نَكْث العَهْد", "التَّنَابُز بِالأَلْقَاب", "قَرِير العَيْن", "خَالِي الوِفَاض", "أَدِيم الأَرْض",
@@ -40,6 +53,7 @@ export const TASHKEEL: Map<string, string> = new Map(
 );
 
 const HARAKAT = /[ً-ْٰ]/;
+const HARAKAT_ALL = /[ً-ْٰـ]/g;
 export const hasTashkeel = (w: string) => HARAKAT.test(w);
 
 /**

@@ -256,3 +256,15 @@ describe("رحلة لفظي — the path", () => {
     expect([5, 6, 7, 8].map((c) => starsFor(c, 8))).toEqual([0, 1, 2, 3]);
   });
 });
+
+describe("verbs that share letters with a noun (كَتَبَ / كُتُب)", () => {
+  it("verb questions use the verb's vocalisation, never the noun's", () => {
+    const lx = datasetLexicon();
+    const rounds = relationRounds(lx, "verb_present", { n: 20, rand: seededRandom(4) });
+    const kataba = rounds.find((r) => lexKey(r.stem) === lexKey("كتب"))!;
+    expect(kataba.stem).toBe("كَتَبَ");
+    expect(kataba.prompt).toContain("«كَتَبَ»");
+    expect(kataba.choices.find((c) => c.id === kataba.correctId)!.text).toBe("يَكْتُبُ");
+    expect(rounds.every((r) => !r.stem.includes("كُتُب"))).toBe(true);
+  });
+});

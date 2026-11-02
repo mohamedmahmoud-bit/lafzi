@@ -161,6 +161,12 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     expect(row.edited?.word).toBe("خَوَر");
   });
 
+  it("a verb sharing letters with a noun is shown without the noun's tashkeel (كتب, not كُتُب)", async () => {
+    await lexicon.normalizeVerbHomographs(getDb());
+    const [w] = await getDb().select().from(s.vocabularyEntries).where(eq(s.vocabularyEntries.normalized, lexKey("كتب")));
+    expect(w.lemma).toBe("كتب");
+  });
+
   it("a reviewer correction is stored beside the original and used on approval", async () => {
     const [row] = await getDb().select().from(s.vocabImportRows).where(and(eq(s.vocabImportRows.word, "دب"), eq(s.vocabImportRows.related, "دببة")));
     await lexicon.editRow(getDb(), row.id, { related: "دُبّة" }, "أنثى الدب: دُبّة");
