@@ -152,6 +152,7 @@ export const NOON_VERBAL_CURRICULUM: CurriculumSnapshotTopic[] = [
       { id: "vo_context", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات يتغير معناها حسب السياق" },
       { id: "vo_anagram", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات بحروف مقلوبة" },
       { id: "vo_confusable", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات متشابهة في الرسم" },
+      { id: "vo_contronym", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات تحمل المعنى وضده" },
     ],
   },
 ];

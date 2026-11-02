@@ -27,6 +27,8 @@ export const SECTION_CATEGORY: Record<string, string> = {
   "كلمات بحروف مقلوبة": "vo_anagram",
   "كلمات بحروف معكوسة": "vo_anagram",
   "كلمات متشابهة في الرسم": "vo_confusable",
+  "كلمات تحمل المعنى وضده": "vo_contronym",
+  "الأضداد في لفظ واحد": "vo_contronym",
 };
 
 /** «نوع العلاقة» column → relation type (null = a meaning-only row). */
@@ -81,6 +83,7 @@ export const CATEGORY_DIFFICULTY: Record<string, number> = {
   vo_context: 3,
   vo_anagram: 3,
   vo_confusable: 3,
+  vo_contronym: 3,
 };
 
 /** Groups that make sense for «الكلمة الدخيلة» (members share a clear, single property). */
