@@ -392,6 +392,9 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
   });
   it("رحلة لفظي: levels open in order, pass at 6/8 with stars, first pass earns level XP once", async () => {
     const journey = await import("@/features/journey/service");
+    // Challenge sections are detected first, so they become the last stage of the path.
+    expect(await lexicon.tagDerivedCategories(getDb())).toBeGreaterThan(0); // e.g. أكل / الكلأ
+    expect(await lexicon.tagDerivedCategories(getDb())).toBe(0);
     expect(await journey.syncJourney(getDb())).toBeGreaterThan(10);
     expect(await journey.syncJourney(getDb())).toBe(0); // append-only, idempotent
     const [cohort] = await getDb().select().from(s.cohorts).limit(1);

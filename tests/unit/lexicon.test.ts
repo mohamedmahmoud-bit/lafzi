@@ -268,3 +268,29 @@ describe("verbs that share letters with a noun (كَتَبَ / كُتُب)", () 
     expect(rounds.every((r) => !r.stem.includes("كُتُب"))).toBe(true);
   });
 });
+
+import { deriveCategories } from "@/features/lexicon/derived";
+describe("Qudurat challenge sections detected from the dictionary", () => {
+  const mk = (words: [string, string[]][]): Lexicon => {
+    const entries = new Map(words.map(([w], i) => [`e${i}`, { id: `e${i}`, lemma: w, difficulty: 3, categories: ["vo_qudurat"] }]));
+    const senses = words.flatMap(([, ms], i) => ms.map((m, j) => ({ id: `s${i}_${j}`, entryId: `e${i}`, meaning: m, example: null, difficulty: 3 })));
+    return { entries, senses, relations: [] };
+  };
+  it("finds anagrams and look-alike spellings only (other sections come from the team's lists)", () => {
+    const lx = mk([
+      ["قطر", ["بلد، ومقدار ما بين طرفي الدائرة"]],
+      ["طرق", ["سبل وممرات"]],
+      ["فتنة", ["ابتلاء واختبار"]],
+      ["فِطنة", ["الذكاء"]],
+      ["عين", ["عضو البصر", "نبع الماء"]],
+      ["الدَّيْجُور", ["الظلام الشديد"]],
+      ["كتاب", ["مؤلف مكتوب"]],
+    ]);
+    const d = deriveCategories(lx);
+    const names = (c: string) => [...d.get(c)!].map((id) => lx.entries.get(id)!.lemma).sort();
+    expect(names("vo_anagram")).toEqual(["طرق", "قطر"]);
+    expect(names("vo_confusable")).toEqual(["فتنة", "فِطنة"]);
+    expect(d.has("vo_polysemy")).toBe(false); // «عين» needs a person's judgement, not a guess
+    expect([...d.values()].some((s) => [...s].some((id) => lx.entries.get(id)!.lemma === "كتاب"))).toBe(false);
+  });
+});

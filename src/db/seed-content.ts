@@ -21,6 +21,8 @@ async function main() {
   const { refreshBankWords } = await import("../features/bank-words/service");
   const bw = await refreshBankWords(db);
   console.log(`  bank word candidates: ${bw.candidates} from ${bw.questions} bank questions`);
+  const { tagDerivedCategories } = await import("../features/lexicon/service");
+  console.log(`  challenge sections: ${await tagDerivedCategories(db)} new tag(s)`);
   const { syncJourney } = await import("../features/journey/service");
   console.log(`  journey: ${await syncJourney(db)} new level(s)`);
 

@@ -6,7 +6,7 @@ import { Num } from "@/components/ui/num";
 import { Pill } from "@/components/ui/pill";
 import { getDb } from "@/db/client";
 import { entryCategories, vocabImportBatches, vocabImportRows, vocabularyEntries, vocabularyRelationships, wordSenses } from "@/db/schema";
-import { acceptRowAction, rejectBankWordAction, editRowAction, rejectRowAction, setEntryAction } from "@/features/admin/content-actions";
+import { acceptRowAction, rejectBankWordAction, editRowAction, rejectRowAction, setEntryAction, setEntryCategoryAction } from "@/features/admin/content-actions";
 import { getTaxonomy } from "@/features/curriculum/service";
 import { RELATION_TEXT, type RelationType } from "@/features/lexicon/mapping";
 import { lexiconStats } from "@/features/lexicon/service";
@@ -233,7 +233,22 @@ export default async function LexiconAdmin({ searchParams }: { searchParams: Pro
                 <div className="flex flex-wrap items-center gap-2">
                   <LemmaForm id={e.id} lemma={e.lemma} />
                   {e.status === "suspended" && <Pill tone="danger">موقوفة</Pill>}
-                  {ec.filter((c) => c.entryId === e.id).map((c) => <Pill key={c.categoryId}>{catName.get(c.categoryId) ?? c.categoryId}</Pill>)}
+                  {ec.filter((c) => c.entryId === e.id).map((c) => (
+                    <form key={c.categoryId} action={setEntryCategoryAction} className="inline-flex">
+                      <input type="hidden" name="entryId" value={e.id} />
+                      <input type="hidden" name="categoryId" value={c.categoryId} />
+                      <input type="hidden" name="remove" value="1" />
+                      <button title="إزالة من القسم" className="rounded-full"><Pill>{catName.get(c.categoryId) ?? c.categoryId} ×</Pill></button>
+                    </form>
+                  ))}
+                  <form action={setEntryCategoryAction} className="inline-flex items-center gap-1">
+                    <input type="hidden" name="entryId" value={e.id} />
+                    <select name="categoryId" required aria-label="أضف إلى قسم" defaultValue="" className="border-border rounded-lg border px-1 py-0.5 text-xs">
+                      <option value="" disabled>+ قسم</option>
+                      {cats.filter((c) => !ec.some((x) => x.entryId === e.id && x.categoryId === c.id)).map((c) => <option key={c.id} value={c.id}>{c.nameAr}</option>)}
+                    </select>
+                    <Button size="sm" variant="ghost">أضف</Button>
+                  </form>
                   <form action={setEntryAction} className="ms-auto flex items-center gap-1">
                     <input type="hidden" name="id" value={e.id} />
                     <select name="difficulty" defaultValue={e.difficulty} className="border-border rounded-lg border px-1 py-0.5 text-xs" aria-label="الصعوبة"><option value="1">سهلة</option><option value="2">متوسطة</option><option value="3">صعبة</option></select>

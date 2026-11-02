@@ -376,6 +376,7 @@ export async function acceptCleanBatchAction(): Promise<{ ok: true; accepted: nu
     if (accepted) await audit({ actorUserId: admin.id, action: "lexicon.bulk_accept_clean", metadata: { count: accepted } });
     const remaining = await lexicon.countClean(getDb());
     if (!remaining) {
+      await lexicon.tagDerivedCategories(getDb());
       await syncJourney(getDb());
       revalidatePath("/admin/lexicon");
     }
@@ -491,6 +492,7 @@ export async function approveBankWordAction(_prev: ActionState, form: FormData):
       reviewerId: admin.id,
     });
     await audit({ actorUserId: admin.id, action: "bank_words.approve", entityType: "bank_word_candidate", entityId: id });
+    await lexicon.tagDerivedCategories(getDb());
     await syncJourney(getDb());
     revalidatePath("/admin/lexicon");
     return { ok: true, message: "اعتُمدت الكلمة" };
@@ -584,4 +586,16 @@ export async function moveSenseAction(_prev: ActionState, form: FormData): Promi
   } catch (e) {
     return fail(e instanceof z.ZodError ? new Error("اكتب الكلمة الصحيحة") : e);
   }
+}
+
+/** Add a word to a vocabulary section, or remove it (e.g. «كلمات يتغير معناها حسب السياق»). */
+export async function setEntryCategoryAction(form: FormData) {
+  const admin = await assertAdmin();
+  const entryId = z.uuid().parse(form.get("entryId"));
+  const categoryId = z.string().regex(/^vo_[a-z_]+$/).parse(form.get("categoryId"));
+  const remove = form.get("remove") === "1";
+  await lexicon.setEntryCategory(getDb(), entryId, categoryId, !remove);
+  if (!remove) await syncJourney(getDb());
+  await audit({ actorUserId: admin.id, action: remove ? "lexicon.category_remove" : "lexicon.category_add", entityType: "vocabulary_entry", entityId: entryId, metadata: { categoryId } });
+  revalidatePath("/admin/lexicon");
 }

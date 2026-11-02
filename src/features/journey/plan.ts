@@ -13,6 +13,7 @@ export const STAGES = [
   { id: "synonyms", nameAr: "المترادفات", categories: ["vo_synonym"] },
   { id: "animals", nameAr: "عالم الحيوان", categories: ["vo_animal_sound", "vo_animal_young", "vo_animal_home", "vo_animal_pair"] },
   { id: "qudurat", nameAr: "مفردات القدرات", categories: ["vo_qudurat"] },
+  { id: "challenges", nameAr: "تحديات القدرات", categories: ["vo_polysemy", "vo_context", "vo_anagram", "vo_confusable", "vo_hard_reading"] },
 ] as const;
 export const STAGE_NAME: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.id, s.nameAr]));
 

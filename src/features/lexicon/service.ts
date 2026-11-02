@@ -347,3 +347,22 @@ export async function moveSense(db: Db, p: { senseId: string; target: string; re
     return { from: from.lemma, to: to.lemma, toId: to.id };
   });
 }
+
+/** Tag the detected Qudurat challenge sections (adds only; manual tags are never removed). */
+export async function tagDerivedCategories(db: DbOrTx) {
+  const { loadLexicon } = await import("./content");
+  const { deriveCategories } = await import("./derived");
+  const lx = await loadLexicon(db, { isProduction: process.env.NODE_ENV === "production" });
+  let n = 0;
+  for (const [categoryId, ids] of deriveCategories(lx)) {
+    if (!ids.size) continue;
+    const res = await db.insert(entryCategories).values([...ids].map((entryId) => ({ entryId, categoryId }))).onConflictDoNothing().returning({ entryId: entryCategories.entryId });
+    n += res.length;
+  }
+  return n;
+}
+
+export async function setEntryCategory(db: DbOrTx, entryId: string, categoryId: string, add: boolean) {
+  if (add) await db.insert(entryCategories).values({ entryId, categoryId }).onConflictDoNothing();
+  else await db.delete(entryCategories).where(and(eq(entryCategories.entryId, entryId), eq(entryCategories.categoryId, categoryId)));
+}

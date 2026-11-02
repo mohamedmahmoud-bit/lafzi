@@ -146,6 +146,12 @@ export const NOON_VERBAL_CURRICULUM: CurriculumSnapshotTopic[] = [
       { id: "vo_verb", noonTopicId: null, noonSubtopicId: null, nameAr: "أفعال" },
       { id: "vo_qudurat", noonTopicId: null, noonSubtopicId: null, nameAr: "مفردات القدرات" },
       { id: "vo_animal_pair", noonTopicId: null, noonSubtopicId: null, nameAr: "أزواج الحيوانات" },
+      // Qudurat challenge sections (detected from the dictionary, or from the team's own lists).
+      { id: "vo_polysemy", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات لها أكثر من معنى" },
+      { id: "vo_hard_reading", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات يصعب قراءتها" },
+      { id: "vo_context", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات يتغير معناها حسب السياق" },
+      { id: "vo_anagram", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات بحروف مقلوبة" },
+      { id: "vo_confusable", noonTopicId: null, noonSubtopicId: null, nameAr: "كلمات متشابهة في الرسم" },
     ],
   },
 ];

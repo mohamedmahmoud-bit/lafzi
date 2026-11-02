@@ -20,6 +20,13 @@ export const SECTION_CATEGORY: Record<string, string> = {
   أفعال: "vo_verb",
   "مفردات القدرات": "vo_qudurat",
   "أزواج الحيوانات": "vo_animal_pair",
+  "كلمات لها أكثر من معنى": "vo_polysemy",
+  "كلمات ذات أكثر من معنى": "vo_polysemy",
+  "كلمات يصعب قراءتها": "vo_hard_reading",
+  "كلمات يتغير معناها حسب السياق": "vo_context",
+  "كلمات بحروف مقلوبة": "vo_anagram",
+  "كلمات بحروف معكوسة": "vo_anagram",
+  "كلمات متشابهة في الرسم": "vo_confusable",
 };
 
 /** «نوع العلاقة» column → relation type (null = a meaning-only row). */
@@ -69,6 +76,11 @@ export const CATEGORY_DIFFICULTY: Record<string, number> = {
   vo_verb: 1,
   vo_qudurat: 3,
   vo_animal_pair: 2,
+  vo_polysemy: 3,
+  vo_hard_reading: 3,
+  vo_context: 3,
+  vo_anagram: 3,
+  vo_confusable: 3,
 };
 
 /** Groups that make sense for «الكلمة الدخيلة» (members share a clear, single property). */
