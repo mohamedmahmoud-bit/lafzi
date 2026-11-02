@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Flame, Lightbulb, RotateCcw, Share2, Swords, X } from "lucide-react";
+import { ChevronLeft, Clock, Flame, Lightbulb, RotateCcw, Share2, Swords, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -10,10 +10,10 @@ import { Confetti } from "@/components/game/feedback";
 import { MatchBoard } from "@/components/game/match-board";
 import { MemoryBoard } from "@/components/game/memory-board";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Card, CardHint, CardTitle } from "@/components/ui/card";
+import { Card, CardHint } from "@/components/ui/card";
 import { Num } from "@/components/ui/num";
 import { Progress } from "@/components/ui/progress";
-import { answerRoundAction, completeGameAction, hintAction } from "@/features/games/actions";
+import { answerRoundAction, completeGameAction, hintAction, startGameAction } from "@/features/games/actions";
 import type { GameView } from "@/features/games/session.service";
 import type { ClientRound, GameSummary } from "@/features/games/types";
 import type { RewardSummary } from "@/features/gamification/rewards";
@@ -63,7 +63,7 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
   }, [allAnswered, view.mechanic, result, view.status, finish]);
 
   if (result || view.status === "completed") {
-    return <Results summary={result} game={game} subskillNames={subskillNames} challengeCode={challengeCode} kind={view.kind} />;
+    return <Results summary={result} game={game} subskillNames={subskillNames} challengeCode={challengeCode} kind={view.kind} categoryId={view.categoryId} />;
   }
 
   return (
@@ -72,7 +72,12 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
         <Link href={`/play/${game.id === "daily_challenge" ? "" : game.id}`} aria-label="خروج" className="text-muted hover:bg-surface-muted grid size-10 place-items-center rounded-full">
           <X aria-hidden className="size-5" />
         </Link>
-        <Progress value={answered} max={rounds.length} label="التقدم" className="h-3" barClassName="bg-mint" />
+        <Progress value={answered} max={rounds.length} label="الأسئلة المجاب عنها" className="h-3" barClassName="bg-mint" />
+        {view.mechanic !== "race" && (
+          <span className="text-muted font-num shrink-0 text-sm font-bold" aria-hidden>
+            <Num value={answered} /> من <Num value={rounds.length} />
+          </span>
+        )}
         <span className="bg-sun-soft text-foreground font-num shrink-0 rounded-full px-3 py-1 text-sm font-bold">
           <Num value={score} />
         </span>
@@ -107,13 +112,16 @@ export function GameRunner({ view, game, subskillNames, challengeCode }: Props) 
   );
 }
 
-/** Pace after an answer: correct moves on fast; a mistake stays long enough to read the right answer. */
+/**
+ * Pace after an answer: a correct answer moves on fast. A mistake stays until the student taps
+ * «فهمت» so they can actually read the right answer (only the race keeps moving, the clock is on).
+ */
 const NEXT_AFTER_CORRECT_MS = 600;
-const NEXT_AFTER_WRONG_MS = 2200;
+const RACE_NEXT_AFTER_WRONG_MS = 1500;
 
 /**
- * Multiple-choice rounds (صائد المعاني، الدخيلة، تحدي اليوم، السباق). No «التالي» button: the game
- * advances by itself, and after a mistake a tap anywhere on the card skips the pause.
+ * Multiple-choice rounds (صائد المعاني، تحدي اليوم، السباق). A correct answer advances by itself;
+ * after a mistake the right answer stays until «فهمت — التالي» (the race moves on by itself).
  */
 function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish, pending }: { view: GameView; rounds: ClientRound[]; patch: (i: number, a: ClientRound["answered"]) => void; update: (i: number, p: Partial<ClientRound>) => void; addScore: (p: number) => void; onError: (e: string | null) => void; onFinish: () => void; pending: boolean }) {
   const race = view.mechanic === "race";
@@ -164,7 +172,8 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
       addScore(res.data.points);
       patch(at, { choiceId, isCorrect: res.data.isCorrect, correctId: res.data.correctId, explanation: res.data.explanation, points: res.data.points, hintUsed: !!r.hintRemoved });
       setFlash(res.data.isCorrect ? "ok" : "no");
-      timer.current = setTimeout(() => advance(at, at), res.data.isCorrect ? NEXT_AFTER_CORRECT_MS : NEXT_AFTER_WRONG_MS);
+      if (res.data.isCorrect) timer.current = setTimeout(() => advance(at, at), NEXT_AFTER_CORRECT_MS);
+      else if (race) timer.current = setTimeout(() => advance(at, at), RACE_NEXT_AFTER_WRONG_MS);
     });
   };
 
@@ -183,8 +192,8 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
       {race && view.deadlineAt && <RaceClock deadline={view.deadlineAt} onTimeUp={onFinish} />}
       <Card
         key={index}
-        className={cn("animate-rise relative space-y-5", flash === "no" && "animate-shake", waitingAfterMistake && "cursor-pointer")}
-        onClick={waitingAfterMistake ? () => advance(index, index) : undefined}
+        className={cn("animate-rise relative space-y-5", flash === "no" && "animate-shake", waitingAfterMistake && race && "cursor-pointer")}
+        onClick={waitingAfterMistake && race ? () => advance(index, index) : undefined}
       >
         {flash === "ok" && <Confetti count={10} />}
         <p className="text-muted text-center text-sm font-semibold">{r.prompt ?? "اختر الإجابة الصحيحة"}</p>
@@ -201,12 +210,11 @@ function ChoiceRounds({ view, rounds, patch, update, addScore, onError, onFinish
               {r.answered.isCorrect ? <>صح! +<Num value={r.answered.points} /></> : "خطأ — الإجابة الصحيحة مظللة"}
             </p>
             {!r.answered.isCorrect && r.answered.explanation && <p className="text-muted text-sm">{r.answered.explanation}</p>}
-            {waitingAfterMistake && (
-              <div className="bg-surface-muted h-1 overflow-hidden rounded-full" aria-hidden>
-                <div className="bg-rose h-full" style={{ animation: `drain ${NEXT_AFTER_WRONG_MS}ms linear forwards` }} />
-              </div>
+            {waitingAfterMistake && !race && (
+              <Button size="lg" block className="mt-2" onClick={(e) => { e.stopPropagation(); advance(index, index); }}>
+                فهمت — التالي
+              </Button>
             )}
-            {waitingAfterMistake && <p className="text-muted text-center text-xs">اضغط للمتابعة</p>}
           </div>
         )}
       </Card>
@@ -236,7 +244,7 @@ function RaceClock({ deadline, onTimeUp }: { deadline: string; onTimeUp: () => v
   );
 }
 
-function Results({ summary, game, subskillNames, challengeCode, kind }: { summary: (GameSummary & { rewards?: RewardSummary }) | null; game: Props["game"]; subskillNames: Record<string, string>; challengeCode: string | null; kind: string }) {
+function Results({ summary, game, challengeCode, kind, categoryId }: { summary: (GameSummary & { rewards?: RewardSummary }) | null; game: Props["game"]; subskillNames: Record<string, string>; challengeCode: string | null; kind: string; categoryId: string | null }) {
   const [link, setLink] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -278,32 +286,25 @@ function Results({ summary, game, subskillNames, challengeCode, kind }: { summar
         </ButtonLink>
       )}
 
-      {summary.subskills.length > 0 && (
-        <Card>
-          <CardTitle>تقدّمك</CardTitle>
-          <ul className="mt-3 space-y-3">
-            {summary.subskills.map((s) => (
-              <li key={s.subskillId}>
-                <div className="flex justify-between text-sm">
-                  <span className="font-semibold">{subskillNames[s.subskillId] ?? s.nameAr}</span>
-                  <span className="text-muted"><Num value={s.correct} /> من <Num value={s.total} /></span>
-                </div>
-                <Progress value={Math.round(s.masteryAfter * 100)} max={100} label={`إتقان ${s.nameAr}`} className="mt-1 h-2" barClassName="bg-mint" />
-              </li>
-            ))}
-          </ul>
-          <CardHint className="mt-2">الكلمات التي أخطأت فيها ستعود لك قريبًا للمراجعة.</CardHint>
-        </Card>
-      )}
+      {summary.total > summary.correct && <CardHint className="text-center">الكلمات التي أخطأت فيها ستعود لك قريبًا للمراجعة.</CardHint>}
+
+      {/* One obvious next step: keep going in the same game (and category). */}
+      <form action={startGameAction}>
+        <input type="hidden" name="gameId" value={game.id === "daily_challenge" ? "meaning_hunter" : game.id} />
+        {categoryId && game.id !== "daily_challenge" && <input type="hidden" name="category" value={categoryId} />}
+        <Button size="lg" block className="h-16 text-xl">
+          {game.id === "daily_challenge" ? "العب جولة في صائد المعاني" : "الجولة التالية"} <ChevronLeft aria-hidden className="size-6" />
+        </Button>
+      </form>
 
       <div className="grid gap-2 sm:grid-cols-2">
         {game.canChallenge && kind !== "challenge" && (
-          <Button size="lg" block onClick={challenge} disabled={pending} className="bg-grape text-white">
+          <Button size="lg" block variant="outline" onClick={challenge} disabled={pending}>
             <Share2 aria-hidden className="size-5" /> {pending ? "لحظة…" : "تحدَّ صاحبك"}
           </Button>
         )}
-        <ButtonLink href={game.id === "daily_challenge" ? "/play" : `/play/${game.id}`} size="lg" variant="outline" block>
-          <RotateCcw aria-hidden className="size-4" /> العب مرة ثانية
+        <ButtonLink href="/play" size="lg" variant="outline" block>
+          <RotateCcw aria-hidden className="size-4" /> لعبة أخرى
         </ButtonLink>
         <ButtonLink href="/" variant="ghost" block>
           <Flame aria-hidden className="text-flame size-4" /> الرئيسية

@@ -27,6 +27,7 @@ export default async function HomePage() {
       <div className="grid min-w-0 content-start gap-4 lg:col-span-2">
         {!d.gender && <GenderPrompt />}
         <StreakHero d={d} />
+        <Collection d={d} />
         <TodayChallenge d={d} />
         <QuickPlay d={d} />
         <Categories d={d} />
@@ -38,13 +39,12 @@ export default async function HomePage() {
           <Card className="flex items-center gap-3">
             <BadgeIcon icon={d.badge.icon} />
             <div>
-              <p className="text-muted text-xs">آخر إنجاز</p>
+              <p className="text-mint text-xs font-bold">🏅 وسام حصلت عليه</p>
               <p className="font-bold">{d.badge.name}</p>
-              <p className="text-muted text-sm">{d.badge.description}</p>
+              <p className="text-muted text-sm">✓ أنجزت: {d.badge.description}</p>
             </div>
           </Card>
         )}
-        <Collection d={d} />
       </aside>
     </div>
   );
@@ -225,18 +225,20 @@ function WeeklyBoard({ d }: { d: DashboardData }) {
 
 function Collection({ d }: { d: DashboardData }) {
   const c = d.collection;
+  const pct = c.total ? Math.round((c.known / c.total) * 100) : 0;
   return (
     <Link href="/words" className="rounded-brand block">
-      <Card className="hover:border-primary/40 transition">
+      <Card className="hover:border-primary/40 space-y-2 transition">
         <div className="flex items-center justify-between">
-          <CardTitle>مجموعة كلماتك</CardTitle>
-          <ChevronLeft aria-hidden className="text-muted size-4" />
+          <CardTitle>مستواك في المفردات</CardTitle>
+          <span className="text-primary-ink flex items-center gap-1 text-sm font-semibold">ذاكر الكلمات <ChevronLeft aria-hidden className="size-4" /></span>
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-          <div className="bg-mint-soft rounded-xl py-2"><p className="font-num text-xl font-bold"><Num value={c.mastered} /></p><p className="text-muted text-[0.7rem]">متقنة</p></div>
-          <div className="bg-sun-soft rounded-xl py-2"><p className="font-num text-xl font-bold"><Num value={c.learning} /></p><p className="text-muted text-[0.7rem]">قيد التعلم</p></div>
-          <div className="bg-surface-muted rounded-xl py-2"><p className="font-num text-xl font-bold"><Num value={c.total} /></p><p className="text-muted text-[0.7rem]">في لفظي</p></div>
+        <div className="flex items-end justify-between gap-2">
+          <p className="font-display text-xl font-bold">تعرف <Num value={c.known} /> من <Num value={c.total} /> كلمة</p>
+          <p className="font-num text-primary-ink text-2xl font-black"><Num value={pct} />٪</p>
         </div>
+        <Progress value={c.known} max={Math.max(1, c.total)} label="الكلمات التي تعرفها" className="h-2.5" barClassName="bg-mint" />
+        <p className="text-muted text-xs">أتقنت <Num value={c.mastered} /> · تتعلّم الآن <Num value={c.learning} /></p>
       </Card>
     </Link>
   );

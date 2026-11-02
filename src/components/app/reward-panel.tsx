@@ -76,9 +76,9 @@ export function RewardPanel({ reward }: { reward: RewardSummary }) {
         >
           <BadgeIcon icon={b.icon} />
           <div>
-            <p className="text-muted text-xs">إنجاز جديد</p>
+            <p className="text-mint text-xs font-bold">🏅 حصلت على وسام جديد!</p>
             <p className="font-bold">{b.name}</p>
-            <p className="text-muted text-sm">{b.description}</p>
+            <p className="text-muted text-sm">✓ أنجزت: {b.description}</p>
           </div>
         </div>
       ))}

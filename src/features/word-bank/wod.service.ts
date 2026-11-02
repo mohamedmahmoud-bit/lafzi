@@ -21,7 +21,8 @@ import { addInteractions, maybeQualifyDay } from "@/features/streaks/daily-rule"
 import { defaultSrs, emptyProgress, MASTERY_LABELS, type MasteryState } from "@/features/vocabulary/srs";
 import { isProduction } from "@/lib/env";
 import { addDays, learningDay } from "@/lib/time";
-import { hashString } from "@/lib/utils";
+import { hashString, seededRandom } from "@/lib/utils";
+import { meaningRounds } from "@/features/games/vocab-builders";
 
 export const WOD_NO_REPEAT_DAYS = 90;
 
@@ -55,8 +56,10 @@ export type VocabWodView =
       day: string;
       word: string;
       categories: string[];
-      revealed: boolean;
-      rated: null | { knew: boolean };
+      /** «ما معنى الكلمة؟» — four approved meanings (the word's own + three that are wrong for it). */
+      choices: { id: string; text: string }[];
+      /** Set once the student answered (graded on the server); the card opens only then. */
+      answered: null | { choiceId: string; correctId: string; isCorrect: boolean };
       /** Shown only after the student tried to recall the meaning. */
       card: null | {
         meanings: { text: string; example: string | null }[];
@@ -67,16 +70,25 @@ export type VocabWodView =
       };
     };
 
+export const DONT_KNOW = "dont_know";
+
+/** The day's check is the same for everyone (seeded by day + word). */
+function wodCheck(lx: Lexicon, entryId: string, day: string) {
+  const [round] = meaningRounds(lx, { n: 1, onlyEntries: [entryId], rand: seededRandom(hashString(`${day}:${entryId}`)) });
+  return round ?? null;
+}
+
 export async function getVocabWod(userId: string, day = learningDay()): Promise<VocabWodView> {
   const db = getDb();
   const lx = await loadLexicon(db, { isProduction: isProduction() });
   const entryId = await ensureVocabWod(day, db, lx);
   const entry = entryId ? lx.entries.get(entryId) : null;
   if (!entryId || !entry) return { status: "unavailable" };
+  const check = wodCheck(lx, entryId, day);
   const [row] = await db.select().from(studentVocabularyWordOfDay).where(and(eq(studentVocabularyWordOfDay.userId, userId), eq(studentVocabularyWordOfDay.day, day))).limit(1);
-  const revealed = !!row?.viewedAt;
+  const done = !!row?.attemptedAt;
   let card = null;
-  if (revealed) {
+  if (done) {
     const [prog] = await db.select().from(studentVocabularyProgress).where(and(eq(studentVocabularyProgress.userId, userId), eq(studentVocabularyProgress.entryId, entryId))).limit(1);
     card = {
       meanings: lx.senses.filter((x) => x.entryId === entryId).map((x) => ({ text: x.meaning, example: x.example })),
@@ -87,52 +99,49 @@ export async function getVocabWod(userId: string, day = learningDay()): Promise<
       media: (await approvedMediaFor(db, [entryId])).get(entryId) ?? [],
     };
   }
-  return { status: "ready", day, word: entry.lemma, categories: entry.categories, revealed, rated: row?.attemptedAt ? { knew: !!row.isCorrect } : null, card };
+  return {
+    status: "ready",
+    day,
+    word: entry.lemma,
+    categories: entry.categories,
+    choices: check?.choices ?? [],
+    answered: done ? { choiceId: row!.selectedChoiceId ?? DONT_KNOW, correctId: check?.correctId ?? "", isCorrect: !!row!.isCorrect } : null,
+    card,
+  };
 }
 
-/** Step 1 — the student recalled in their head, then reveals the card. */
-export async function revealVocabWod(userId: string) {
+/**
+ * The student picks the meaning (or «لا أعرف»). Graded on the server; once per day. XP for taking
+ * part, a bonus only for a correct answer — nothing for self-reported knowledge.
+ */
+export async function answerVocabWod(userId: string, choiceId: string): Promise<RewardSummary & { view: VocabWodView }> {
   const day = learningDay();
   const db = getDb();
-  const entryId = await ensureVocabWod(day, db);
+  const lx = await loadLexicon(db, { isProduction: isProduction() });
+  const entryId = await ensureVocabWod(day, db, lx);
   if (!entryId) throw new VocabWodError("unavailable");
+  const check = wodCheck(lx, entryId, day);
+  if (choiceId !== DONT_KNOW && !check?.choices.some((c) => c.id === choiceId)) throw new VocabWodError("bad_option");
+  // Any of the word's own approved meanings is right.
+  const own = new Set(lx.senses.filter((x) => x.entryId === entryId).map((x) => x.id));
+  const isCorrect = own.has(choiceId);
   const rewards = new RewardCollector();
+  let first = false;
   await db.transaction(async (tx) => {
     await lockProfile(tx, userId);
     await tx.insert(studentVocabularyWordOfDay).values({ userId, day, entryId, viewedAt: new Date() }).onConflictDoNothing();
-    await awardXp(tx, { userId, action: "wod_opened", idempotencyKey: `wod_opened:${userId}:${day}`, day }, rewards);
-  });
-  if (rewards.totalXp) await analytics.track("word_of_day_viewed", { day }, { userId });
-  return getVocabWod(userId, day);
-}
-
-export async function refreshVocabCounters(tx: Tx, userId: string) {
-  await tx
-    .update(studentProfiles)
-    .set({
-      totalWordsLearned: sql`(select count(*) from ${studentVocabularyProgress} where ${studentVocabularyProgress.userId} = ${userId} and ${studentVocabularyProgress.correctCount} > 0)`,
-      masteredWords: sql`(select count(*) from ${studentVocabularyProgress} where ${studentVocabularyProgress.userId} = ${userId} and ${studentVocabularyProgress.state} = 'mastered')`,
-    })
-    .where(eq(studentProfiles.userId, userId));
-}
-
-/** Step 2 — the student says honestly whether they knew it. Once per day; feeds spaced repetition. */
-export async function rateVocabWod(userId: string, knew: boolean): Promise<RewardSummary & { view: VocabWodView }> {
-  const day = learningDay();
-  const rewards = new RewardCollector();
-  let first = false;
-  await getDb().transaction(async (tx) => {
-    await lockProfile(tx, userId);
-    const [row] = await tx.select().from(studentVocabularyWordOfDay).where(and(eq(studentVocabularyWordOfDay.userId, userId), eq(studentVocabularyWordOfDay.day, day))).for("update").limit(1);
-    if (!row?.viewedAt) throw new VocabWodError("unavailable");
-    if (row.attemptedAt) return;
-    await tx.update(studentVocabularyWordOfDay).set({ attemptedAt: new Date(), isCorrect: knew, selectedChoiceId: knew ? "knew" : "didnt" }).where(and(eq(studentVocabularyWordOfDay.userId, userId), eq(studentVocabularyWordOfDay.day, day), isNull(studentVocabularyWordOfDay.attemptedAt)));
+    const done = await tx
+      .update(studentVocabularyWordOfDay)
+      .set({ attemptedAt: new Date(), isCorrect, selectedChoiceId: choiceId })
+      .where(and(eq(studentVocabularyWordOfDay.userId, userId), eq(studentVocabularyWordOfDay.day, day), isNull(studentVocabularyWordOfDay.attemptedAt)))
+      .returning({ day: studentVocabularyWordOfDay.day });
+    if (!done.length) return;
     first = true;
-    const [p] = await tx.select().from(studentVocabularyProgress).where(and(eq(studentVocabularyProgress.userId, userId), eq(studentVocabularyProgress.entryId, row.entryId))).limit(1);
-    const next = defaultSrs.review(p ?? emptyProgress(), knew, new Date());
-    await tx.insert(studentVocabularyProgress).values({ userId, entryId: row.entryId, ...next }).onConflictDoUpdate({ target: [studentVocabularyProgress.userId, studentVocabularyProgress.entryId], set: next });
-    // Self-rated: XP for doing it, never extra XP for claiming "I knew it".
+    const [p] = await tx.select().from(studentVocabularyProgress).where(and(eq(studentVocabularyProgress.userId, userId), eq(studentVocabularyProgress.entryId, entryId))).limit(1);
+    const next = defaultSrs.review(p ?? emptyProgress(), isCorrect, new Date());
+    await tx.insert(studentVocabularyProgress).values({ userId, entryId, ...next }).onConflictDoUpdate({ target: [studentVocabularyProgress.userId, studentVocabularyProgress.entryId], set: next });
     await awardXp(tx, { userId, action: "wod_answered", idempotencyKey: `wod_answered:${userId}:${day}`, day }, rewards);
+    if (isCorrect) await awardXp(tx, { userId, action: "wod_correct", idempotencyKey: `wod_correct:${userId}:${day}`, day }, rewards);
     await ensureDailyActivity(tx, userId, day);
     await tx.update(studentDailyActivity).set({ wordOfDayCompleted: true }).where(and(eq(studentDailyActivity.userId, userId), eq(studentDailyActivity.day, day)));
     await addInteractions(tx, userId, day, 1);
@@ -143,7 +152,17 @@ export async function rateVocabWod(userId: string, knew: boolean): Promise<Rewar
   });
   if (first) {
     await emitRewardAnalytics(userId, rewards, { source: "word_of_day" });
-    await analytics.track("word_of_day_completed", { day, knew }, { userId });
+    await analytics.track("word_of_day_completed", { day, correct: isCorrect }, { userId });
   }
   return { ...rewards.toJSON(), view: await getVocabWod(userId, day) };
+}
+
+export async function refreshVocabCounters(tx: Tx, userId: string) {
+  await tx
+    .update(studentProfiles)
+    .set({
+      totalWordsLearned: sql`(select count(*) from ${studentVocabularyProgress} where ${studentVocabularyProgress.userId} = ${userId} and ${studentVocabularyProgress.correctCount} > 0)`,
+      masteredWords: sql`(select count(*) from ${studentVocabularyProgress} where ${studentVocabularyProgress.userId} = ${userId} and ${studentVocabularyProgress.state} = 'mastered')`,
+    })
+    .where(eq(studentProfiles.userId, userId));
 }

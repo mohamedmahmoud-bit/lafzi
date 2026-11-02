@@ -178,15 +178,24 @@ describe.skipIf(!TEST_URL)("Lafzi 2.0 (Postgres)", async () => {
     const v = await wod.getVocabWod(a);
     expect(v.status).toBe("ready");
     if (v.status !== "ready") return;
-    expect(v.card).toBeNull(); // recall first: the meaning is hidden until the student reveals it
-    const shown = await wod.revealVocabWod(a);
-    expect(shown.status === "ready" && shown.card).toBeTruthy();
-    await wod.rateVocabWod(a, true);
+    expect(v.card).toBeNull(); // recall first: the meaning is hidden until the student answers
+    expect(v.choices).toHaveLength(4);
+    expect(JSON.stringify(v)).not.toContain("correctId\":\""); // no answer key before answering
+    // A wrong pick is graded as wrong — there is no self-reported «I knew it».
+    const [today] = await getDb().select().from(s.vocabularyWordOfDay).where(eq(s.vocabularyWordOfDay.day, day));
+    const ownIds = new Set((await getDb().select().from(s.wordSenses).where(eq(s.wordSenses.entryId, today.entryId))).map((x) => x.id));
+    expect(v.choices.filter((c) => ownIds.has(c.id))).toHaveLength(1);
+    const wrong = v.choices.find((c) => !ownIds.has(c.id))!;
+    const res = await wod.answerVocabWod(a, wrong.id);
+    expect(res.view.status === "ready" && res.view.answered?.isCorrect).toBe(false);
+    expect(res.awards.map((x) => x.action)).toEqual(["wod_answered"]); // no «correct» bonus
+    expect(res.view.status === "ready" && res.view.card).toBeTruthy();
     const act = await activity(a);
     expect(act.wordInteractions).toBe(1);
     expect(act.qualified).toBe(false);
-    const again = await wod.rateVocabWod(a, false);
+    const again = await wod.answerVocabWod(a, wrong.id);
     expect(again.totalXp).toBe(0);
+    await expect(wod.answerVocabWod(b, "not-a-choice")).rejects.toMatchObject({ code: "bad_option" });
   });
 
   it("صائد المعاني: server-graded rounds; finishing ≥5 answers qualifies the day once", async () => {

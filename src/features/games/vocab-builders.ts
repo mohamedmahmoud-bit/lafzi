@@ -66,7 +66,7 @@ export const sharesKeyWord = (a: string, b: string) => {
   return [...contentWords(b)].some((w) => A.has(w));
 };
 
-type Pick = { rand: Rand; preferEntries?: string[]; skipEntries?: string[]; minHardness?: number };
+type Pick = { rand: Rand; preferEntries?: string[]; skipEntries?: string[]; minHardness?: number; onlyEntries?: string[] };
 
 /** Order a pool: due words first, then hardest, then random; skip mastered words unless the pool runs dry. */
 function orderPool<T extends { entryId: string }>(lx: Lexicon, pool: T[], n: number, p: Pick): T[] {
@@ -84,7 +84,7 @@ function orderPool<T extends { entryId: string }>(lx: Lexicon, pool: T[], n: num
 
 /** صائد المعاني: word → its approved meaning among 3 close-but-wrong approved meanings. */
 export function meaningRounds(lx: Lexicon, p: { n: number; category?: string } & Pick): Round[] {
-  const filtered = lx.senses.filter((s) => !p.category || lx.entries.get(s.entryId)?.categories.includes(p.category));
+  const filtered = lx.senses.filter((s) => (!p.category || lx.entries.get(s.entryId)?.categories.includes(p.category)) && (!p.onlyEntries || p.onlyEntries.includes(s.entryId)));
   const byEntry = new Map<string, (typeof filtered)[number]>();
   for (const s of shuffle(filtered, p.rand)) if (!byEntry.has(s.entryId)) byEntry.set(s.entryId, s);
   const pool = orderPool(lx, [...byEntry.values()], p.n, p);

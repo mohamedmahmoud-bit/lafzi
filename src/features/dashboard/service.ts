@@ -81,7 +81,7 @@ export async function getDashboard(user: CurrentUser) {
     myRank: cohort.me?.rank ?? null,
     boardSize: cohort.size,
     badge,
-    collection: { learned: profile.totalWordsLearned, mastered: profile.masteredWords, learning: (byState.learning ?? 0) + (byState.familiar ?? 0), total: lx.entries.size },
+    collection: { known: (byState.familiar ?? 0) + (byState.mastered ?? 0), learned: profile.totalWordsLearned, mastered: profile.masteredWords, learning: (byState.learning ?? 0) + (byState.familiar ?? 0), total: lx.entries.size },
   };
 }
 export type DashboardData = Awaited<ReturnType<typeof getDashboard>>;
